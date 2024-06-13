@@ -10,10 +10,7 @@ const {
   validateAccessToken,
   allowRoles,
 } = require("../middleware/AuthMiddleware.js");
-
-// const multer = require("multer");
-// const fs = require("fs");
-// const path = require("path");
+const uploadSingle = require("../middleware/MulterMiddleware.js");
 
 router.post("/login", login);
 router.post("/register", register);

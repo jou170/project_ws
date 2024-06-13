@@ -3,7 +3,6 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const client = require("../database/database");
 const crypto = require("crypto");
-const fs = require("fs");
 require("dotenv").config();
 
 const loginSchema = Joi.object({
