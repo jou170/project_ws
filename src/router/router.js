@@ -15,6 +15,11 @@ const {
 } = require("../controllers/AdminController.js");
 
 const {
+  upgradeCompanyPlanType,
+  generateCompanyInvitationCode,
+} = require("../controllers/CompanyController.js");
+
+const {
   validateAccessToken,
   allowRoles,
 } = require("../middleware/AuthMiddleware.js");
@@ -75,13 +80,12 @@ router.post(
   "/upgrade",
   validateAccessToken,
   allowRoles(["company"]),
-  editTopUpRequest
+  upgradeCompanyPlanType
 );
 router.post(
   "/invitation_code",
   validateAccessToken,
   allowRoles(["company"]),
-  editTopUpRequest
+  generateCompanyInvitationCode
 );
-
 module.exports = router;
