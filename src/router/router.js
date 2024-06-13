@@ -6,6 +6,14 @@ const {
   editUserProfileData,
   editUserProfilePicture,
 } = require("../controllers/UserController.js");
+
+const {
+  getCompanies,
+  getCompaniesByUsername,
+  getTopUpRequest,
+  editTopUpRequest,
+} = require("../controllers/AdminController.js");
+
 const {
   validateAccessToken,
   allowRoles,
@@ -54,10 +62,11 @@ router.get(
   allowRoles(["admin"]),
   getTopUpRequest
 );
-// router.post("/forgot-password", forgotPassword)
-// router.post("/reset-password", resetPassword)
-// router.get("/users", validateAccessToken, getUsers)
-// router.get("/user/:id", validateAccessToken, getUserById)
-// router.put("/user/:id", validateAccessToken, updateUser)
-// router.delete("/user/:id", validateAccessToken, deleteUser)
+router.put(
+  "/topup/:topup_id",
+  validateAccessToken,
+  allowRoles(["admin"]),
+  editTopUpRequest
+);
+
 module.exports = router;
