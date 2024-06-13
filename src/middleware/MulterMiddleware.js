@@ -26,8 +26,7 @@ const uploadSingle = multer({
     fileSize: 20000, // dalam byte, jadi 1000 byte = 1kb, 1000000 byte = 1mb
   },
   fileFilter: (req, file, callback) => {
-    // file type yang diperbolehkan, dalam bentuk regex
-    const filetypes = /jpeg|jpg|png|gif/;
+    const filetypes = /jpeg|jpg|png/;
     const fileExtension = path.extname(file.originalname).toLowerCase();
 
     const checkExtName = filetypes.test(fileExtension);
@@ -36,7 +35,7 @@ const uploadSingle = multer({
     if (checkExtName && checkMimeType) {
       callback(null, true);
     } else {
-      callback(new Error("tipe data salah"), false);
+      callback(new Error("Wrong file type"), false);
     }
   },
 });
