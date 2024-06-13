@@ -69,4 +69,19 @@ router.put(
   editTopUpRequest
 );
 
+// Company
+
+router.post(
+  "/upgrade",
+  validateAccessToken,
+  allowRoles(["company"]),
+  editTopUpRequest
+);
+router.post(
+  "/invitation_code",
+  validateAccessToken,
+  allowRoles(["company"]),
+  editTopUpRequest
+);
+
 module.exports = router;

@@ -128,6 +128,7 @@ const register = async (req, res) => {
     if (role === "employee") {
       additionalProperties.company = {};
     } else if (role === "company") {
+      additionalProperties.balance = 0.0;
       additionalProperties.invitation_code = await generateInvitationCode(
         collection
       );
