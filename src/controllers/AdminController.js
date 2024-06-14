@@ -88,6 +88,7 @@ const editTopupSchema = Joi.object({
 const getTopUpRequest = async (req, res) => {
   try {
     const { status, limit, offset, date } = req.query;
+    const { user } = req.body;
     const { error } = topupSchema.validate({ status, limit, offset, date });
     if (error) {
       const errorMessage = error.details
@@ -97,33 +98,67 @@ const getTopUpRequest = async (req, res) => {
     }
     await client.connect();
     const database = client.db("proyek_ws");
-    collection = await database
-      .collection("topups")
-      .aggregate([
-        {
-          $lookup: {
-            from: "users",
-            localField: "username",
-            foreignField: "username",
-            as: "companyInfo",
+
+    if (user.role == "company") {
+      collection = await database
+        .collection("topups")
+        .aggregate([
+          {
+            $match: { username: user.username },
           },
-        },
-        {
-          $unwind: "$companyInfo",
-        },
-        {
-          $project: {
-            _id: 0,
-            topup_id: 1,
-            datetime: 1,
-            company_name: "$companyInfo.name",
-            company_username: "$companyInfo.username",
-            amount: 1,
-            status: 1,
+          {
+            $lookup: {
+              from: "users",
+              localField: "username",
+              foreignField: "username",
+              as: "companyInfo",
+            },
           },
-        },
-      ])
-      .toArray();
+          {
+            $unwind: "$companyInfo",
+          },
+          {
+            $project: {
+              _id: 0,
+              topup_id: 1,
+              datetime: 1,
+              company_name: "$companyInfo.name",
+              company_username: "$companyInfo.username",
+              amount: 1,
+              status: 1,
+            },
+          },
+        ])
+        .toArray();
+    } else {
+      collection = await database
+        .collection("topups")
+        .aggregate([
+          {
+            $lookup: {
+              from: "users",
+              localField: "username",
+              foreignField: "username",
+              as: "companyInfo",
+            },
+          },
+          {
+            $unwind: "$companyInfo",
+          },
+          {
+            $project: {
+              _id: 0,
+              topup_id: 1,
+              datetime: 1,
+              company_name: "$companyInfo.name",
+              company_username: "$companyInfo.username",
+              amount: 1,
+              status: 1,
+            },
+          },
+        ])
+        .toArray();
+    }
 
     if (date) {
       collection = await database
@@ -167,7 +202,6 @@ const getTopUpRequest = async (req, res) => {
     if (status) {
       collection = collection.filter((item) => item.status === status);
     }
-    // Ensure limit and offset are integers
     const limitInt = limit ? parseInt(limit, 10) : null;
     const offsetInt = offset ? parseInt(offset, 10) : 0;
 

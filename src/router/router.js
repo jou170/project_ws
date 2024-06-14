@@ -73,7 +73,7 @@ router.get(
 router.get(
   "/topup",
   validateAccessToken,
-  allowRoles(["admin"]),
+  allowRoles(["admin", "company"]),
   getTopUpRequest
 );
 router.put(
