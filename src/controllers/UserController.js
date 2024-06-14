@@ -88,7 +88,7 @@ const registerSchema = Joi.object({
   name: Joi.string().required(),
   password: Joi.string().min(8).required(),
   role: Joi.string().valid("employee", "company").required(),
-  phone_number: Joi.string().pattern(/^\d+$/).required().messages({
+  phone_number: Joi.string().pattern(/^\d+$/).min(12).required().messages({
     "string.pattern.base": "phone_number must contain only digits",
   }),
   address: Joi.string().required(),
@@ -126,12 +126,13 @@ const register = async (req, res) => {
 
     let additionalProperties = {};
     if (role === "employee") {
-      additionalProperties.company = {};
+      additionalProperties.company = "";
     } else if (role === "company") {
       additionalProperties.balance = 0.0;
       additionalProperties.invitation_code = await generateInvitationCode(
         collection
       );
+      additionalProperties.plan_type = "free";
       additionalProperties.invitation_limit = 10;
       additionalProperties.employees = [];
     }

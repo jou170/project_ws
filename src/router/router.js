@@ -20,6 +20,9 @@ const {
 } = require("../middleware/AuthMiddleware.js");
 const uploadSingle = require("../middleware/MulterMiddleware.js");
 
+
+const { join, joinCompany, getEmployeeCompany } = require("../controllers/EmployeeController.js")
+
 // General
 router.post("/login", login);
 router.post("/register", register);
@@ -83,5 +86,18 @@ router.post(
   allowRoles(["company"]),
   editTopUpRequest
 );
+
+// employee
+router.post("/company", 
+  validateAccessToken, 
+  allowRoles(["employee"]), 
+  joinCompany
+)
+
+router.get("/company", 
+  validateAccessToken,
+  allowRoles(["employee"]), 
+  getEmployeeCompany
+)
 
 module.exports = router;
