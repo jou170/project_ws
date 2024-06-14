@@ -86,12 +86,6 @@ router.put(
 // Company
 
 router.get(
-  "/employees",
-  validateAccessToken,
-  allowRoles(["company"]),
-  getEmployees
-);
-router.get(
   "/employees/:username",
   validateAccessToken,
   allowRoles(["company"]),
@@ -102,6 +96,12 @@ router.delete(
   validateAccessToken,
   allowRoles(["company"]),
   removeEmployeesFromCompany
+);
+router.get(
+  "/employees",
+  validateAccessToken,
+  allowRoles(["company"]),
+  getEmployees
 );
 router.post(
   "/topup",

@@ -6,13 +6,18 @@ require("dotenv").config();
 
 const getEmployeesSchema = Joi.object({
   name: Joi.string().optional(),
-  limit: Joi.number().integer().min(1).optional().default(10),
-  offset: Joi.number().integer().min(1).optional().default(0),
+  limit: Joi.number()
+    .integer()
+    .min(1)
+    .optional()
+    .default(10)
+    .when("offset", { is: Joi.exist(), then: Joi.required() }),
+  offset: Joi.number().integer().min(1).optional(),
 });
 
 const getEmployees = async (req, res) => {
   const { name, limit, offset } = req.query;
-  const user = req.body.user;
+  const { user } = req.body;
 
   const { error, value } = getEmployeesSchema.validate({ name, limit, offset });
 
@@ -26,24 +31,59 @@ const getEmployees = async (req, res) => {
   try {
     await client.connect();
     const database = client.db("proyek_ws");
-    const collection = database.collection("users");
+    let employeeDetails;
+    const mainUser = await database
+      .collection("users")
+      .findOne({ username: user.username });
 
-    // Membangun query pencarian
-    const query = {
-      role: "employee",
-      "company.username": user.username,
-    };
-    if (name) {
-      query.name = new RegExp(name, "i"); // Pencarian nama yang mirip (case-insensitive)
+    if (!mainUser) {
+      return res.status(404).send({ message: "Company not found" });
     }
 
-    const employees = await collection
-      .find(query)
-      .skip(parseInt(offset))
-      .limit(parseInt(limit))
-      .toArray();
+    const employeeUsernames = mainUser.employees;
 
-    return res.status(200).json(employees);
+    if (name) {
+      const nameQuery = req.query.name || "";
+      const nameRegex = new RegExp(nameQuery, "i");
+
+      employeeDetails = await database
+        .collection("users")
+        .find(
+          {
+            username: { $in: employeeUsernames },
+            name: { $regex: nameRegex },
+          },
+          { projection: { username: 1, email: 1, name: 1, _id: 0 } }
+        )
+        .toArray();
+    } else {
+      employeeDetails = await database
+        .collection("users")
+        .find(
+          { username: employeeUsernames },
+          {
+            projection: { username: 1, email: 1, name: 1, _id: 0 },
+          }
+        )
+        .toArray();
+    }
+
+    if (limit && offset) {
+      employeeDetails = employeeDetails.slice(
+        limit * (offset - 1),
+        limit * offset
+      );
+    } else if (limit) {
+      employeeDetails = employeeDetails.slice(0, limit);
+    }
+
+    const totalEmployees = mainUser.employees.length;
+    const response = {
+      total_employee: totalEmployees,
+      employees: employeeDetails,
+    };
+
+    return res.status(200).send(response);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -52,8 +92,135 @@ const getEmployees = async (req, res) => {
   }
 };
 
-const getEmployeesByUsername = async (req, res) => {};
-const removeEmployeesFromCompany = async (req, res) => {};
+const employeeSchema = Joi.object({
+  username: Joi.string().min(1).required(),
+});
+
+const getEmployeesByUsername = async (req, res) => {
+  const { user } = req.body;
+  const { username } = req.params;
+  const { error, value } = employeeSchema.validate({ username });
+
+  if (error) {
+    const errorMessage = error.details
+      .map((detail) => detail.message.replace(/"/g, ""))
+      .join("; ");
+    return res.status(400).json({ message: errorMessage });
+  }
+
+  try {
+    await client.connect();
+    const database = client.db("proyek_ws");
+    let employeeDetail;
+    const mainUser = await database
+      .collection("users")
+      .aggregate([
+        {
+          $match: {
+            username: user.username,
+            employees: {
+              $in: [username],
+            },
+          },
+        },
+      ])
+      .toArray();
+
+    if (mainUser.length == 0) {
+      return res.status(404).send({ message: "Employee not found" });
+    }
+
+    employeeDetail = await database.collection("users").findOne(
+      {
+        username: username,
+      },
+      {
+        projection: {
+          _id: 0,
+          username: 1,
+          name: 1,
+          email: 1,
+          profile_picture: 1,
+          phone_number: 1,
+          address: 1,
+        },
+      }
+    );
+    const response = {
+      employee: {
+        username: employeeDetail.username,
+        name: employeeDetail.name,
+        email: employeeDetail.email,
+        profile_picture: employeeDetail.profile_picture,
+        phone_number: employeeDetail.phone_number,
+        address: employeeDetail.address,
+        absence: "",
+      },
+    };
+    return res.status(200).send(response);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  } finally {
+    await client.close();
+  }
+};
+
+const removeEmployeesFromCompany = async (req, res) => {
+  const { user } = req.body;
+  const { username } = req.params;
+  const { error, value } = employeeSchema.validate({ username });
+
+  if (error) {
+    const errorMessage = error.details
+      .map((detail) => detail.message.replace(/"/g, ""))
+      .join("; ");
+    return res.status(400).json({ message: errorMessage });
+  }
+
+  try {
+    await client.connect();
+    const database = client.db("proyek_ws");
+    let employeeDetail;
+    const mainUser = await database
+      .collection("users")
+      .aggregate([
+        {
+          $match: {
+            username: user.username,
+            employees: {
+              $in: [username],
+            },
+          },
+        },
+      ])
+      .toArray();
+
+    if (mainUser.length == 0) {
+      return res.status(404).send({ message: "Employee not found" });
+    }
+
+    const result = await database.collection("users").updateOne(
+      { username: user.username },
+      {
+        $pull: {
+          employees: username,
+        },
+      }
+    );
+
+    if (result) {
+      return res.status(200).send({
+        message: `Successfully delete ${username} from ${user.username}`,
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  } finally {
+    await client.close();
+  }
+};
 
 const upgradePlanSchema = Joi.object({
   plan_type: Joi.string().valid("standard", "premium").required(),

@@ -63,7 +63,6 @@ const getCompaniesByUsername = async (req, res) => {
     };
 
     return res.status(200).json(result);
-    console.log(result);
   } catch (error) {
     console.error("Error fetching user data:", error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -74,12 +73,18 @@ const getCompaniesByUsername = async (req, res) => {
 
 const topupSchema = Joi.object({
   status: Joi.string().valid("approved", "rejected", "pending").optional(),
-  limit: Joi.number().integer().min(1).optional().default(10),
-  offset: Joi.number().integer().min(1).optional().default(0),
+  limit: Joi.number()
+    .integer()
+    .min(1)
+    .optional()
+    .default(10)
+    .when("offset", { is: Joi.exist(), then: Joi.required() }),
+  offset: Joi.number().integer().min(1).optional(),
   date: Joi.string()
     .optional()
     .pattern(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD"),
 });
+
 const editTopupSchema = Joi.object({
   topup_id: Joi.string().required(),
   accept: Joi.string().valid("true", "false").required(),
@@ -202,13 +207,10 @@ const getTopUpRequest = async (req, res) => {
     if (status) {
       collection = collection.filter((item) => item.status === status);
     }
-    const limitInt = limit ? parseInt(limit, 10) : null;
-    const offsetInt = offset ? parseInt(offset, 10) : 0;
-
-    if (limitInt !== null) {
-      collection = collection.slice(offsetInt, offsetInt + limitInt);
-    } else if (offsetInt) {
-      collection = collection.slice(offsetInt);
+    if (limit && offset) {
+      collection = collection.slice(limit * (offset - 1), limit * offset);
+    } else if (limit) {
+      collection = collection.slice(0, limit);
     }
 
     if (collection.length == 0) {
