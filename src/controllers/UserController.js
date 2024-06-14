@@ -126,7 +126,7 @@ const register = async (req, res) => {
 
     let additionalProperties = {};
     if (role === "employee") {
-      additionalProperties.company = {};
+      additionalProperties.company = "";
     } else if (role === "company") {
       additionalProperties.balance = 0;
       additionalProperties.plan_type = "free";

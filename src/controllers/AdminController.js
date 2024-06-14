@@ -21,7 +21,7 @@ const getCompanies = async (req, res) => {
         name: company.name,
         plan_type: company.plan_type,
         total_employee: company.employee ? company.employee.length : 0,
-        total_spent: 0,
+        total_spent: 0, // Assuming total_spent is 0 for now
       })),
     };
 
