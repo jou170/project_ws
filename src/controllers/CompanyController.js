@@ -1,7 +1,9 @@
-const Joi = require("joi");
+const Joi = require("joi").extend(require("@joi/date"));
+const moment = require("moment");
 const jwt = require("jsonwebtoken");
 const client = require("../database/database");
 const crypto = require("crypto");
+const { default: axios } = require("axios");
 require("dotenv").config();
 
 const getEmployeesSchema = Joi.object({
@@ -221,6 +223,122 @@ const removeEmployeesFromCompany = async (req, res) => {
     await client.close();
   }
 };
+
+const getNextScheduleId = async (collection) => {
+  const lastSchedule = await collection
+    .find()
+    .sort({ schedule_id: -1 })
+    .limit(1)
+    .toArray();
+  return lastSchedule.length > 0 ? lastSchedule[0].schedule_id + 1 : 1;
+};
+
+const scheduleSchema = Joi.object({
+  start_date: Joi.date()
+    .format("YYYY-MM-DD")
+    .min(moment().add(1, "days").format("YYYY-MM-DD"))
+    .max(moment().endOf("year").format("YYYY-MM-DD"))
+    .required(),
+  end_date: Joi.date()
+    .format("YYYY-MM-DD")
+    .min(Joi.ref("start_date"))
+    .max(moment().endOf("year").format("YYYY-MM-DD"))
+    .required(),
+});
+
+const createSchedule = async (req, res) => {
+  const { start_date, end_date } = req.body;
+  const username = req.body.user.username;
+
+  // Validate the request body
+  const { error } = scheduleSchema.validate({ start_date, end_date });
+  if (error) {
+    return res.status(400).json({
+      message: error.details.map((detail) => detail.message).join("; "),
+    });
+  }
+
+  try {
+    await client.connect();
+    const database = client.db("proyek_ws");
+    const collection = database.collection("schedules");
+
+    const response = await axios.get("https://dayoffapi.vercel.app/api", {
+      params: { year: moment(start_date).year() },
+    });
+    const holidays = response.data;
+
+    const holidayDates = holidays.map((holiday) => ({
+      date: moment(holiday.tanggal, "YYYY-M-D").format("YYYY-MM-DD"),
+      detail: holiday.keterangan,
+      is_cuti: holiday.is_cuti,
+    }));
+
+    const startDate = moment(start_date);
+    const endDate = moment(end_date);
+    let activeDays = 0;
+    let offDays = [];
+
+    for (
+      let date = startDate;
+      date.isSameOrBefore(endDate);
+      date.add(1, "days")
+    ) {
+      const day = date.format("dddd");
+      const dateString = date.format("YYYY-MM-DD");
+
+      const isWeekend = day === "Saturday" || day === "Sunday";
+      const holiday = holidayDates.find((h) => h.date === dateString);
+
+      if (!isWeekend && !holiday) {
+        activeDays++;
+        await collection.insertOne({
+          schedule_id: await getNextScheduleId(collection),
+          username,
+          date: dateString,
+          day,
+          attendance: [],
+        });
+      } else {
+        offDays.push({
+          day,
+          date: dateString,
+          detail: holiday ? holiday.detail : "",
+        });
+      }
+    }
+
+    const charge = activeDays * 0.1;
+
+    const companyCollection = database.collection("users");
+    const company = await companyCollection.findOne({ username });
+
+    if (company.balance < charge) {
+      return res.status(400).json({ message: "Insufficient balance" });
+    }
+
+    // Deduct the charge from the company's balance
+    await companyCollection.updateOne(
+      { username },
+      { $inc: { balance: -charge } }
+    );
+
+    return res.status(201).json({
+      message: "Schedule created successfully",
+      charge: `$${charge.toFixed(2)}`,
+      active_day: `${activeDays} days`,
+      off_day: offDays,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Internal Server Error" });
+  } finally {
+    await client.close();
+  }
+};
+
+const getSchedule = async (req, res) => {};
+const deleteSchedule = async (req, res) => {};
 
 const upgradePlanSchema = Joi.object({
   plan_type: Joi.string().valid("standard", "premium").required(),
@@ -491,6 +609,9 @@ module.exports = {
   getEmployees,
   getEmployeesByUsername,
   removeEmployeesFromCompany,
+  createSchedule,
+  getSchedule,
+  deleteSchedule,
   upgradeCompanyPlanType,
   generateCompanyInvitationCode,
   companyTopUp,

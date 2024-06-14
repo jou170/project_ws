@@ -18,6 +18,9 @@ const {
   getEmployees,
   getEmployeesByUsername,
   removeEmployeesFromCompany,
+  createSchedule,
+  getSchedule,
+  deleteSchedule,
   upgradeCompanyPlanType,
   generateCompanyInvitationCode,
   companyTopUp,
@@ -85,6 +88,24 @@ router.put(
 
 // Company
 
+router.post(
+  "/schedule",
+  validateAccessToken,
+  allowRoles(["company"]),
+  createSchedule
+);
+router.get(
+  "/schedule",
+  validateAccessToken,
+  allowRoles(["company"]),
+  getSchedule
+);
+router.delete(
+  "/schedule/:schedule_id",
+  validateAccessToken,
+  allowRoles(["company"]),
+  deleteSchedule
+);
 router.get(
   "/employees/:username",
   validateAccessToken,
