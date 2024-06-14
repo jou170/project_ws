@@ -15,6 +15,9 @@ const {
 } = require("../controllers/AdminController.js");
 
 const {
+  getEmployees,
+  getEmployeesByUsername,
+  removeEmployeesFromCompany,
   upgradeCompanyPlanType,
   generateCompanyInvitationCode,
   companyTopUp,
@@ -27,7 +30,6 @@ const {
 const uploadSingle = require("../middleware/MulterMiddleware.js");
 
 const {
-  join,
   joinCompany,
   getEmployeeCompany,
 } = require("../controllers/EmployeeController.js");
@@ -83,13 +85,30 @@ router.put(
 
 // Company
 
+router.get(
+  "/employees",
+  validateAccessToken,
+  allowRoles(["company"]),
+  getEmployees
+);
+router.get(
+  "/employees/:username",
+  validateAccessToken,
+  allowRoles(["company"]),
+  getEmployeesByUsername
+);
+router.delete(
+  "/employees/:username",
+  validateAccessToken,
+  allowRoles(["company"]),
+  removeEmployeesFromCompany
+);
 router.post(
   "/topup",
   validateAccessToken,
   allowRoles(["company"]),
   companyTopUp
 );
-
 router.post(
   "/upgrade",
   validateAccessToken,

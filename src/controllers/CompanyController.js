@@ -4,6 +4,57 @@ const client = require("../database/database");
 const crypto = require("crypto");
 require("dotenv").config();
 
+const getEmployeesSchema = Joi.object({
+  name: Joi.string().optional(),
+  limit: Joi.number().integer().min(1).optional().default(10),
+  offset: Joi.number().integer().min(1).optional().default(0),
+});
+
+const getEmployees = async (req, res) => {
+  const { name, limit, offset } = req.query;
+  const user = req.body.user;
+
+  const { error, value } = getEmployeesSchema.validate({ name, limit, offset });
+
+  if (error) {
+    const errorMessage = error.details
+      .map((detail) => detail.message.replace(/"/g, ""))
+      .join("; ");
+    return res.status(400).json({ message: errorMessage });
+  }
+
+  try {
+    await client.connect();
+    const database = client.db("proyek_ws");
+    const collection = database.collection("users");
+
+    // Membangun query pencarian
+    const query = {
+      role: "employee",
+      "company.username": user.username,
+    };
+    if (name) {
+      query.name = new RegExp(name, "i"); // Pencarian nama yang mirip (case-insensitive)
+    }
+
+    const employees = await collection
+      .find(query)
+      .skip(parseInt(offset))
+      .limit(parseInt(limit))
+      .toArray();
+
+    return res.status(200).json(employees);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  } finally {
+    await client.close();
+  }
+};
+
+const getEmployeesByUsername = async (req, res) => {};
+const removeEmployeesFromCompany = async (req, res) => {};
+
 const upgradePlanSchema = Joi.object({
   plan_type: Joi.string().valid("standard", "premium").required(),
 });
@@ -269,8 +320,10 @@ async function generateTopupId() {
     throw error;
   }
 }
-
 module.exports = {
+  getEmployees,
+  getEmployeesByUsername,
+  removeEmployeesFromCompany,
   upgradeCompanyPlanType,
   generateCompanyInvitationCode,
   companyTopUp,

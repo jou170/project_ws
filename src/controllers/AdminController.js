@@ -74,8 +74,8 @@ const getCompaniesByUsername = async (req, res) => {
 
 const topupSchema = Joi.object({
   status: Joi.string().valid("approved", "rejected", "pending").optional(),
-  limit: Joi.string().min(1).optional(),
-  offset: Joi.string().min(1).optional(),
+  limit: Joi.number().integer().min(1).optional().default(10),
+  offset: Joi.number().integer().min(1).optional().default(0),
   date: Joi.string()
     .optional()
     .pattern(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD"),
