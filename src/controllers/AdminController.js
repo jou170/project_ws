@@ -262,7 +262,7 @@ const editTopUpRequest = async (req, res) => {
 
     let oldBalance = parseFloat(company.balance);
     let balanceToAdd = parseFloat(collection.amount);
-    let newBalance = parseFloat(oldBalance + balanceToAdd);
+    let newBalance = oldBalance + balanceToAdd;
     if (accept === "true") {
       await database
         .collection("users")
