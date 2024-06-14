@@ -17,6 +17,7 @@ const {
 const {
   upgradeCompanyPlanType,
   generateCompanyInvitationCode,
+  companyTopUp,
 } = require("../controllers/CompanyController.js");
 
 const {
@@ -81,6 +82,13 @@ router.put(
 );
 
 // Company
+
+router.post(
+  "/topup",
+  validateAccessToken,
+  allowRoles(["company"]),
+  companyTopUp
+);
 
 router.post(
   "/upgrade",

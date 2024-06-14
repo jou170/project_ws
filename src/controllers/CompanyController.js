@@ -78,7 +78,9 @@ const upgradeCompanyPlanType = async (req, res) => {
       return res.status(400).json({ message: "Insufficient balance" });
     }
 
-    const newBalance = company.balance - cost;
+    const newBalance = parseFloat(
+      parseFloat(company.balance) - parseFloat(cost)
+    );
 
     const result = await collection.updateOne(
       { username },
@@ -178,4 +180,98 @@ const generateCompanyInvitationCode = async (req, res) => {
   }
 };
 
-module.exports = { upgradeCompanyPlanType, generateCompanyInvitationCode };
+const amountSchema = Joi.object({
+  amount: Joi.number().min(5).max(1000).required(),
+});
+
+const companyTopUp = async (req, res) => {
+  const { user, amount } = req.body;
+  try {
+    const { error } = amountSchema.validate({ amount });
+    if (error) {
+      const errorMessage = error.details
+        .map((detail) => detail.message.replace(/"/g, ""))
+        .join("; ");
+      return res.status(400).json({ message: errorMessage });
+    }
+
+    await client.connect();
+    const database = client.db("proyek_ws");
+    const collection = database.collection("topups");
+
+    const pendingTopup = await collection.findOne({
+      username: user.username,
+      status: "pending",
+    });
+
+    if (pendingTopup) {
+      return res.status(400).send({
+        message:
+          "Please wait until latest topup attempt verified by our system",
+      });
+    }
+    const currentDate = new Date();
+    const datetime = `${currentDate.getFullYear()}-${padNumber(
+      currentDate.getMonth() + 1
+    )}-${padNumber(currentDate.getDate())} ${padNumber(
+      currentDate.getHours()
+    )}:${padNumber(currentDate.getMinutes())}`;
+
+    function padNumber(number) {
+      return number.toString().padStart(2, "0");
+    }
+
+    const topup_id = await generateTopupId();
+    topup = await database.collection("topups").insertOne({
+      topup_id: topup_id,
+      username: user.username,
+      amount: amount,
+      status: "pending",
+      created: datetime,
+    });
+
+    return res.status(200).send({
+      topup_id: topup_id,
+      amount: "$" + amount,
+      status: "pending",
+      time: datetime,
+    });
+  } catch (error) {
+    console.error("Error fetching user data:", error);
+    res.status(500).send("Internal server error");
+  } finally {
+    await client.close();
+  }
+};
+
+async function generateTopupId() {
+  try {
+    await client.connect();
+    const database = client.db("proyek_ws");
+    const collection = database.collection("topups");
+    let newTopupId = 1;
+
+    const lastTopup = await collection
+      .find()
+      .sort({ topup_id: -1 })
+      .limit(1)
+      .toArray();
+
+    if (lastTopup.length === 1) {
+      const lastTopupId = lastTopup[0].topup_id;
+      newTopupId = lastTopupId.toString();
+      const newTopupIdInt = parseInt(newTopupId, 10);
+      newTopupId = newTopupIdInt + 1;
+    }
+    return newTopupId;
+  } catch (error) {
+    console.error("Error generating new topup ID:", error);
+    throw error;
+  }
+}
+
+module.exports = {
+  upgradeCompanyPlanType,
+  generateCompanyInvitationCode,
+  companyTopUp,
+};

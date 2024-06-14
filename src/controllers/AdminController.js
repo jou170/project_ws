@@ -11,7 +11,7 @@ const getCompanies = async (req, res) => {
       .collection("users")
       .find(
         { role: "company" },
-        { projection: { username: 1, name: 1, plan_type: 1, employee: 1 } }
+        { projection: { username: 1, name: 1, plan_type: 1, employees: 1 } }
       )
       .toArray();
 
@@ -20,7 +20,7 @@ const getCompanies = async (req, res) => {
         username: company.username,
         name: company.name,
         plan_type: company.plan_type,
-        total_employee: company.employee ? company.employee.length : 0,
+        total_employee: company.employees.length,
         total_spent: 0,
       })),
     };
@@ -44,7 +44,7 @@ const getCompaniesByUsername = async (req, res) => {
       .find(
         { username: username },
         { role: "company" },
-        { projection: { username: 1, name: 1, plan_type: 1, employee: 1 } } // Include name, plan_type, and employee fields
+        { projection: { username: 1, name: 1, plan_type: 1, employees: 1 } } // Include name, plan_type, and employee fields
       )
       .toArray();
 
@@ -66,7 +66,7 @@ const getCompaniesByUsername = async (req, res) => {
     console.log(result);
   } catch (error) {
     console.error("Error fetching user data:", error);
-    res.status(500).send("Internal server error");
+    return res.status(500).json({ message: "Internal Server Error" });
   } finally {
     await client.close();
   }
@@ -226,9 +226,9 @@ const editTopUpRequest = async (req, res) => {
       .collection("users")
       .findOne({ username: collection.username });
 
-    let oldBalance = parseInt(company.balance);
-    let balanceToAdd = parseInt(collection.amount);
-    let newBalance = oldBalance + balanceToAdd;
+    let oldBalance = parseFloat(company.balance);
+    let balanceToAdd = parseFloat(collection.amount);
+    let newBalance = parseFloat(oldBalance + balanceToAdd);
     if (accept === "true") {
       await database
         .collection("users")

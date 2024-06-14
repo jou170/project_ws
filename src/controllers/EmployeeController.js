@@ -27,8 +27,8 @@ const joinCompany = async (req, res) => {
   let company = await collection.findOne({ invitation_code });
 
   if (!company) {
-    return res.status(404).json({
-      message: "Company not found",
+    return res.status(400).json({
+      message: "Invalid invitation code",
     });
   }
 
@@ -36,7 +36,7 @@ const joinCompany = async (req, res) => {
     company.invitation_limit == 0 ||
     !cekLimit(company.plan_type, company.employees.length)
   ) {
-    return res.status(404).json({
+    return res.status(400).json({
       message: "Invalid invitation code",
     });
   }
