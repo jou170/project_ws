@@ -232,7 +232,6 @@ const getNextScheduleId = async (collection) => {
     .toArray();
   return lastSchedule.length > 0 ? lastSchedule[0].schedule_id + 1 : 1;
 };
-
 const scheduleSchema = Joi.object({
   start_date: Joi.date()
     .format("YYYY-MM-DD")
@@ -245,7 +244,6 @@ const scheduleSchema = Joi.object({
     .max(moment().endOf("year").format("YYYY-MM-DD"))
     .required(),
 });
-
 const createSchedule = async (req, res) => {
   const { start_date, end_date } = req.body;
   const username = req.body.user.username;
@@ -263,6 +261,7 @@ const createSchedule = async (req, res) => {
     const database = client.db("proyek_ws");
     const collection = database.collection("schedules");
 
+    // Fetch public holidays from the Dayoff API
     const response = await axios.get("https://dayoffapi.vercel.app/api", {
       params: { year: moment(start_date).year() },
     });
@@ -278,9 +277,20 @@ const createSchedule = async (req, res) => {
     const endDate = moment(end_date);
     let activeDays = 0;
     let offDays = [];
+    let existingDays = [];
+
+    // Fetch existing schedules for the company within the date range
+    const existingSchedules = await collection
+      .find({
+        username,
+        date: { $gte: start_date, $lte: end_date },
+      })
+      .toArray();
+
+    const existingDates = existingSchedules.map((schedule) => schedule.date);
 
     for (
-      let date = startDate;
+      let date = startDate.clone();
       date.isSameOrBefore(endDate);
       date.add(1, "days")
     ) {
@@ -289,26 +299,32 @@ const createSchedule = async (req, res) => {
 
       const isWeekend = day === "Saturday" || day === "Sunday";
       const holiday = holidayDates.find((h) => h.date === dateString);
+      const isAlreadyScheduled = existingDates.includes(dateString);
 
-      if (!isWeekend && !holiday) {
+      if (!isWeekend && !holiday && !isAlreadyScheduled) {
         activeDays++;
-        await collection.insertOne({
-          schedule_id: await getNextScheduleId(collection),
-          username,
-          date: dateString,
-          day,
-          attendance: [],
-        });
       } else {
-        offDays.push({
-          day,
-          date: dateString,
-          detail: holiday ? holiday.detail : "",
-        });
+        if (isWeekend || holiday) {
+          offDays.push({
+            day,
+            date: dateString,
+            detail: holiday ? holiday.detail : "",
+          });
+        }
+        if (isAlreadyScheduled) {
+          existingDays.push(dateString);
+        }
       }
     }
 
-    const charge = activeDays * 0.1;
+    if (activeDays === 0) {
+      return res.status(400).json({
+        message:
+          "No schedules were created as all dates are either holidays, weekends, or already scheduled.",
+      });
+    }
+
+    const charge = parseFloat(activeDays / 10);
 
     const companyCollection = database.collection("users");
     const company = await companyCollection.findOne({ username });
@@ -317,17 +333,43 @@ const createSchedule = async (req, res) => {
       return res.status(400).json({ message: "Insufficient balance" });
     }
 
-    // Deduct the charge from the company's balance
+    let oldBalance = parseFloat(company.balance);
+    let newBalance = oldBalance - charge;
+
     await companyCollection.updateOne(
       { username },
-      { $inc: { balance: -charge } }
+      { $inc: { balance: newBalance } }
     );
+
+    for (
+      let date = startDate.clone();
+      date.isSameOrBefore(endDate);
+      date.add(1, "days")
+    ) {
+      const day = date.format("dddd");
+      const dateString = date.format("YYYY-MM-DD");
+
+      const isWeekend = day === "Saturday" || day === "Sunday";
+      const holiday = holidayDates.find((h) => h.date === dateString);
+      const isAlreadyScheduled = existingDates.includes(dateString);
+
+      if (!isWeekend && !holiday && !isAlreadyScheduled) {
+        await collection.insertOne({
+          schedule_id: await getNextScheduleId(collection),
+          username,
+          date: dateString,
+          day,
+          attendance: [],
+        });
+      }
+    }
 
     return res.status(201).json({
       message: "Schedule created successfully",
       charge: `$${charge.toFixed(2)}`,
       active_day: `${activeDays} days`,
-      off_day: offDays,
+      off_days: offDays,
+      existing_days: existingDays,
     });
   } catch (err) {
     console.error(err);
