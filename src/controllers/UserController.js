@@ -3,6 +3,8 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const client = require("../database/database");
 const crypto = require("crypto");
+const { uploadPhoto } = require("../middleware/MulterMiddleware");
+
 require("dotenv").config();
 
 const loginSchema = Joi.object({
@@ -146,7 +148,7 @@ const register = async (req, res) => {
       role,
       phone_number,
       address,
-      profile_picture: ".",
+      profile_picture: "./uploads/default.png",
       ...additionalProperties,
     });
 
@@ -191,17 +193,24 @@ const editUserProfileSchema = Joi.object({
     "string.pattern.base": "phone_number must contain only digits",
   }),
   address: Joi.string().optional(),
+  email: Joi.string().optional().email(),
 });
 
 const editUserProfileData = async (req, res) => {
-  const { name, phone_number, address } = req.body;
+  const { name, phone_number, address, email } = req.body;
   const user = req.body.user;
+
+  await client.connect();
+  const database = client.db("proyek_ws");
+  const collection = database.collection("users");
 
   const { error } = editUserProfileSchema.validate({
     name,
     phone_number,
     address,
+    email,
   });
+
   if (error) {
     const errorMessage = error.details
       .map((detail) => detail.message.replace(/"/g, ""))
@@ -209,15 +218,25 @@ const editUserProfileData = async (req, res) => {
     return res.status(400).json({ message: errorMessage });
   }
 
-  try {
-    await client.connect();
-    const database = client.db("proyek_ws");
-    const collection = database.collection("users");
+  if (email) {
+    if (email == req.body.user.email) {
+      return res.status(400).json({
+        message: "The new email address cannot be the same as the previous one",
+      });
+    }
 
+    const existingUser = await collection.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "Email already exists" });
+    }
+  }
+
+  try {
     const updateFields = {};
     if (name) updateFields.name = name;
     if (phone_number) updateFields.phone_number = phone_number;
     if (address) updateFields.address = address;
+    if (email) updateFields.email = email;
 
     const filter = { username: user.username };
 
@@ -245,7 +264,26 @@ const editUserProfileData = async (req, res) => {
     await client.close();
   }
 };
-const editUserProfilePicture = async (req, res) => {};
+
+const editUserProfilePicture = async (req, res, next) => {
+  let user = req.body.user;
+  const upload = uploadPhoto(user.username).single("profile_picture");
+
+  try {
+    upload(req, res, function (err) {
+      if (err) {
+        return res.status(400).json({ message: err.message });
+      } else {
+        return res.json({ message: "File uploaded successfully." });
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "Terjadi kesalahan saat memperbarui profil",
+    });
+  }
+};
 
 module.exports = {
   login,

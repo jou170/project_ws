@@ -30,7 +30,6 @@ const {
   validateAccessToken,
   allowRoles,
 } = require("../middleware/AuthMiddleware.js");
-const uploadSingle = require("../middleware/MulterMiddleware.js");
 
 const {
   joinCompany,
