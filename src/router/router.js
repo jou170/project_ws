@@ -100,7 +100,7 @@ router.get(
   getSchedule
 );
 router.delete(
-  "/schedule/:schedule_id",
+  "/schedule",
   validateAccessToken,
   allowRoles(["company"]),
   deleteSchedule
@@ -112,7 +112,7 @@ router.get(
   getEmployeesByUsername
 );
 router.delete(
-  "/employees/:username",
+  "/employees",
   validateAccessToken,
   allowRoles(["company"]),
   removeEmployeesFromCompany
