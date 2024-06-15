@@ -280,7 +280,7 @@ const editUserProfilePicture = async (req, res, next) => {
   } catch (err) {
     return res.status(500).json({
       success: false,
-      message: "Terjadi kesalahan saat memperbarui profil",
+      message: "Fail to upload profile picture",
     });
   }
 };
