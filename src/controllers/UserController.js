@@ -150,7 +150,7 @@ const register = async (req, res) => {
       role,
       phone_number,
       address,
-      profile_picture: "/uploads/default.jpg",
+      profile_picture: "/uploads/default.png",
       ...additionalProperties,
     });
 
@@ -181,7 +181,6 @@ const viewUserProfile = async (req, res) => {
     delete user._id;
     delete user.password;
     delete user.role;
-
     return res.status(200).json(user);
   } catch (error) {
     console.error(error);
@@ -267,16 +266,20 @@ const editUserProfileData = async (req, res) => {
   }
 };
 
+const viewUserProfilePicture = async (req, res) => {
+  return res.status(200).sendFile(req.body.user.profile_picture, { root: "." });
+}
+
 const editUserProfilePicture = async (req, res) => {
   let user = req.body.user;
   const upload = uploadPhoto(user.username).single("profile_picture");
 
-  try {
-    upload(req, res, async function (err) {
-      if (err) {
-        return res.status(400).json({ message: err.message });
-      }
+  upload(req, res, async function (err) {
+    if (err) {
+      return res.status(400).json({ message: err.message });
+    }
 
+    try {
       await client.connect();
       const database = client.db("proyek_ws");
       const collection = database.collection("users");
@@ -284,27 +287,24 @@ const editUserProfilePicture = async (req, res) => {
       await collection.updateOne(
         { username: user.username },
         { $set: { profile_picture: `/uploads/${req.file.filename}` } }
-      )
-    });
-
-    return res.json({ message: "Update profile picture successfully." });
-
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: `Error : ${err}`,
-    });
-  }
-
+      );
+      return res.json({ message: "Update profile picture successfully." });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: `Error : ${err}`,
+      });
+    }
+  });
 };
 
-const deleteProfilePicture = async (req, res) => {
+const deleteUserProfilePicture = async (req, res) => {
 
   const filename = req.body.user.profile_picture;
   if (filename.includes("default")) {
     return res.status(400).json({ message: "Profile picture has been deleted before" })
   }
-  const filePath = "./" + filename; 
+  const filePath = "./" + filename;
 
   fs.unlink(filePath, async (err) => {
     if (err) {
@@ -318,7 +318,7 @@ const deleteProfilePicture = async (req, res) => {
     try {
       await collection.updateOne(
         { username: req.body.user.username },
-        { $set: { profile_picture: "/uploads/default.jpg" } }
+        { $set: { profile_picture: "/uploads/default.png" } }
       );
 
       return res.status(200).json({ message: "Delete Profile Picture Successfully" });
@@ -329,12 +329,12 @@ const deleteProfilePicture = async (req, res) => {
   });
 };
 
-
 module.exports = {
   login,
   register,
   viewUserProfile,
   editUserProfileData,
+  viewUserProfilePicture,
   editUserProfilePicture,
-  deleteProfilePicture
+  deleteUserProfilePicture
 };

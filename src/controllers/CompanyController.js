@@ -6,6 +6,17 @@ const crypto = require("crypto");
 const { default: axios } = require("axios");
 require("dotenv").config();
 
+function formateddate() {
+  let date = new Date();
+  const day = date.getDate().toString().padStart(2, "0");
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const year = date.getFullYear().toString().padStart(2, "0");
+  const hours = date.getHours().toString().padStart(2, "0");
+  const minutes = date.getMinutes().toString().padStart(2, "0");
+
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
 const getEmployeesSchema = Joi.object({
   name: Joi.string().optional(),
   limit: Joi.number()
@@ -365,6 +376,22 @@ const createSchedule = async (req, res) => {
       }
     }
 
+    const transCollection = database.collection("transactions");
+
+    let insertTrans = await transCollection.insertOne({
+      username: username,
+      type: "Create schedules",
+      date: formateddate(),
+      startDate: start_date,
+      endDate: end_date,
+      number_of_schedules: activeDays,
+      charge: charge.toFixed(2)
+    })
+
+    if (insertTrans.modifiedCount === 0) {
+      return res.status(500).json({ message: "Failed to save transaction" })
+    }
+
     return res.status(201).json({
       message: "Schedule created successfully",
       charge: `$${charge.toFixed(2)}`,
@@ -542,6 +569,18 @@ const deleteSchedule = async (req, res) => {
       { $set: { balance: newBalance } }
     );
 
+    const transCollection = database.collection("transactions");
+    const trans = await transCollection.insertOne({
+      username: username,
+      type: `Delete schedules`,
+      date: formateddate(),
+      charge: charge.toFixed(2)
+    })
+
+    if (trans.modifiedCount === 0) {
+      return res.status(500).json({ message: "Failed to save the transactions" });
+    }
+
     return res.status(200).json({
       message: "Schedules deleted successfully",
       deleted_schedules: deletedSchedules,
@@ -642,9 +681,22 @@ const upgradeCompanyPlanType = async (req, res) => {
       return res.status(500).json({ message: "Failed to upgrade plan type" });
     }
 
+    const transCollection = database.collection("transactions");
+    const trans = await transCollection.insertOne({
+      username: username,
+      type: `Upgrade plan type from ${req.body.user.plan_type} to ${plan_type}`,
+      date: formateddate(),
+      charge: cost.toFixed(2)
+    })
+
+    if (trans.modifiedCount === 0) {
+      return res.status(500).json({ message: "Failed to save the transaction" });
+    }
+
     return res
       .status(200)
       .json({ message: `Successful upgrade plan type to ${plan_type}` });
+
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Internal Server Error" });
