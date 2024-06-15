@@ -3,6 +3,8 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const client = require("../database/database");
 const crypto = require("crypto");
+const path = require("path");
+const fs = require("fs");
 const { uploadPhoto } = require("../middleware/MulterMiddleware");
 
 require("dotenv").config();
@@ -148,7 +150,7 @@ const register = async (req, res) => {
       role,
       phone_number,
       address,
-      profile_picture: "./uploads/default.png",
+      profile_picture: "/uploads/default.jpg",
       ...additionalProperties,
     });
 
@@ -265,25 +267,68 @@ const editUserProfileData = async (req, res) => {
   }
 };
 
-const editUserProfilePicture = async (req, res, next) => {
+const editUserProfilePicture = async (req, res) => {
   let user = req.body.user;
   const upload = uploadPhoto(user.username).single("profile_picture");
 
   try {
-    upload(req, res, function (err) {
+    upload(req, res, async function (err) {
       if (err) {
         return res.status(400).json({ message: err.message });
-      } else {
-        return res.json({ message: "File uploaded successfully." });
       }
+
+      await client.connect();
+      const database = client.db("proyek_ws");
+      const collection = database.collection("users");
+
+      await collection.updateOne(
+        { username: user.username },
+        { $set: { profile_picture: `/uploads/${req.file.filename}` } }
+      )
     });
+
+    return res.json({ message: "Update profile picture successfully." });
+
   } catch (err) {
     return res.status(500).json({
       success: false,
-      message: "Fail to upload profile picture",
+      message: `Error : ${err}`,
     });
   }
+
 };
+
+const deleteProfilePicture = async (req, res) => {
+
+  const filename = req.body.user.profile_picture;
+  if (filename.includes("default")) {
+    return res.status(400).json({ message: "Profile picture has been deleted before" })
+  }
+  const filePath = "./" + filename; 
+
+  fs.unlink(filePath, async (err) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).send({ error: err });
+    }
+
+    const database = client.db("proyek_ws");
+    const collection = database.collection("users");
+
+    try {
+      await collection.updateOne(
+        { username: req.body.user.username },
+        { $set: { profile_picture: "/uploads/default.jpg" } }
+      );
+
+      return res.status(200).json({ message: "Delete Profile Picture Successfully" });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).send({ error: error.message });
+    }
+  });
+};
+
 
 module.exports = {
   login,
@@ -291,4 +336,5 @@ module.exports = {
   viewUserProfile,
   editUserProfileData,
   editUserProfilePicture,
+  deleteProfilePicture
 };

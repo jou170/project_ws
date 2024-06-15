@@ -5,6 +5,7 @@ const {
   viewUserProfile,
   editUserProfileData,
   editUserProfilePicture,
+  deleteProfilePicture,
 } = require("../controllers/UserController.js");
 
 const {
@@ -58,6 +59,12 @@ router.put(
   editUserProfilePicture
 );
 
+router.delete(
+  "/profile/picture", 
+  validateAccessToken, 
+  allowRoles(["employee", "company"]),
+  deleteProfilePicture
+)
 // Admin
 
 router.get(
