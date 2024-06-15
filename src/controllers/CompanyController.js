@@ -324,7 +324,7 @@ const createSchedule = async (req, res) => {
       });
     }
 
-    const charge = parseFloat(activeDays / 10);
+    const charge = activeDays * 0.1;
 
     const companyCollection = database.collection("users");
     const company = await companyCollection.findOne({ username });
@@ -335,10 +335,11 @@ const createSchedule = async (req, res) => {
 
     let oldBalance = parseFloat(company.balance);
     let newBalance = oldBalance - charge;
+    newBalance = parseFloat(newBalance.toFixed(2));
 
     await companyCollection.updateOne(
       { username },
-      { $inc: { balance: newBalance } }
+      { $set: { balance: newBalance } }
     );
 
     for (
@@ -379,8 +380,180 @@ const createSchedule = async (req, res) => {
   }
 };
 
-const getSchedule = async (req, res) => {};
-const deleteSchedule = async (req, res) => {};
+const getScheduleSchema = Joi.object({
+  day: Joi.number().integer().min(1).max(31).optional(),
+  month: Joi.number()
+    .integer()
+    .min(1)
+    .max(12)
+    .default(moment().month() + 1), //default bulan ini
+  year: Joi.number().integer().min(2023).default(moment().year()), //default tahun ini
+  limit: Joi.number()
+    .integer()
+    .min(1)
+    .optional()
+    .default(10)
+    .when("offset", { is: Joi.exist(), then: Joi.required() }),
+  offset: Joi.number().integer().min(1).optional(),
+});
+
+const getSchedule = async (req, res) => {
+  const { day, month, year, limit, offset } = req.query;
+  const username = req.body.user.username;
+
+  const { error } = getScheduleSchema.validate({
+    day,
+    month,
+    year,
+    limit,
+    offset,
+  });
+  if (error) {
+    return res.status(400).json({
+      message: error.details.map((detail) => detail.message).join("; "),
+    });
+  }
+
+  try {
+    await client.connect();
+    const database = client.db("proyek_ws");
+    const scheduleCollection = database.collection("schedules");
+    const userCollection = database.collection("users");
+
+    // Calculate the start and end date for the query
+    let startDate, endDate;
+    if (day) {
+      startDate = moment({ year, month: month - 1, day })
+        .startOf("day")
+        .format("YYYY-MM-DD");
+      endDate = moment({ year, month: month - 1, day })
+        .endOf("day")
+        .format("YYYY-MM-DD");
+    } else {
+      startDate = moment({ year, month: month - 1 })
+        .startOf("month")
+        .format("YYYY-MM-DD");
+      endDate = moment({ year, month: month - 1 })
+        .endOf("month")
+        .format("YYYY-MM-DD");
+    }
+
+    // Fetch schedules for the specified date range
+    let schedules = await scheduleCollection
+      .find({
+        username,
+        date: { $gte: startDate, $lte: endDate },
+      })
+      .toArray();
+
+    // Apply pagination if limit and offset are provided
+    if (limit && offset) {
+      schedules = schedules.slice(limit * (offset - 1), limit * offset);
+    } else if (limit) {
+      schedules = schedules.slice(0, limit);
+    }
+    const company = await userCollection.findOne({ username });
+    const employeeUsernames = company.employees || [];
+
+    const employeeDetails = await userCollection
+      .find({ username: { $in: employeeUsernames } })
+      .toArray();
+
+    schedules = schedules.map((schedule) => {
+      const attendanceSet = new Set(schedule.attendance);
+      return {
+        ...schedule,
+        attendance: employeeDetails.map((employee) => ({
+          username: employee.username,
+          name: employee.name,
+          attend: attendanceSet.has(employee.username),
+        })),
+      };
+    });
+
+    return res.status(200).json({ schedules });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Internal Server Error" });
+  } finally {
+    await client.close();
+  }
+};
+
+const deleteScheduleSchema = Joi.object({
+  start_date: Joi.date().format("YYYY-MM-DD").required(),
+  end_date: Joi.date()
+    .format("YYYY-MM-DD")
+    .min(Joi.ref("start_date"))
+    .required(),
+});
+
+const deleteSchedule = async (req, res) => {
+  const { start_date, end_date } = req.query;
+  const username = req.body.user.username;
+
+  const { error } = deleteScheduleSchema.validate({ start_date, end_date });
+  if (error) {
+    return res.status(400).json({
+      message: error.details.map((detail) => detail.message).join("; "),
+    });
+  }
+
+  try {
+    await client.connect();
+    const database = client.db("proyek_ws");
+    const collection = database.collection("schedules");
+    const companyCollection = database.collection("users");
+
+    const existingSchedules = await collection
+      .find({
+        username,
+        date: { $gte: start_date, $lte: end_date },
+      })
+      .toArray();
+
+    if (existingSchedules.length === 0) {
+      return res.status(404).json({
+        message: "No schedules found within the specified date range",
+      });
+    }
+
+    const deletedSchedules = existingSchedules.map((schedule) => schedule.date);
+    await collection.deleteMany({
+      username,
+      date: { $gte: start_date, $lte: end_date },
+    });
+
+    const company = await companyCollection.findOne({ username });
+    if (!company) {
+      return res.status(404).json({ message: "Company not found" });
+    }
+
+    // Deduct balance
+    let charge = deletedSchedules.length * 0.1;
+    charge = parseFloat(charge.toFixed(2));
+
+    let newBalance = parseFloat(company.balance) - charge;
+    newBalance = parseFloat(newBalance.toFixed(2));
+
+    // Update the company's balance
+    await companyCollection.updateOne(
+      { username },
+      { $set: { balance: newBalance } }
+    );
+
+    return res.status(200).json({
+      message: "Schedules deleted successfully",
+      deleted_schedules: deletedSchedules,
+      charge: `$${charge.toFixed(2)}`,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Internal Server Error" });
+  } finally {
+    await client.close();
+  }
+};
 
 const upgradePlanSchema = Joi.object({
   plan_type: Joi.string().valid("standard", "premium").required(),
@@ -559,7 +732,20 @@ const generateCompanyInvitationCode = async (req, res) => {
 };
 
 const amountSchema = Joi.object({
-  amount: Joi.number().min(5).max(1000).required(),
+  amount: Joi.number()
+    .min(5)
+    .max(1000)
+    .required()
+    .custom((value, helpers) => {
+      // Check if value has more than two decimal places
+      if (value.toFixed(2) != value) {
+        return helpers.error("amount.invalid");
+      }
+      return value;
+    }, "Decimal precision validation")
+    .messages({
+      "amount.invalid": "Amount must have at most two decimal places",
+    }),
 });
 
 const companyTopUp = async (req, res) => {
@@ -616,7 +802,7 @@ const companyTopUp = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching user data:", error);
-    res.status(500).send("Internal server error");
+    res.status(500).send({ message: "Internal server error" });
   } finally {
     await client.close();
   }
