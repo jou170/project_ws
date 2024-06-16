@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
 const { uploadPhoto } = require("../middleware/MulterMiddleware");
+const { type } = require("express/lib/response");
 
 require("dotenv").config();
 
@@ -333,16 +334,15 @@ const isCompanyExist = async (company) => {
   await client.connect();
   const collection = client.db("proyek_ws").collection("users");
 
-  let comp = await collection.findOne({
+  return await collection.findOne({
     username: company
   })
 
-  return comp;
 }
 
 const viewTransactionAdminSchema = Joi.object({
   start_date: Joi.date().format("YYYY-MM-DD").optional(),
-  end_date: Joi.date().format("YYYY-MM-DD").optional(),
+  end_date: Joi.date().format("YYYY-MM-DD").min(Joi.ref("start_date")).optional(),
 });
 
 const viewTransaction = async (req, res) => {
@@ -350,19 +350,22 @@ const viewTransaction = async (req, res) => {
   const transCollection = client.db("proyek_ws").collection("transactions");
   const { company, start_date, end_date } = req.query;
 
-  
-  if ((start_date && !end_date) || (!start_date && end_date)) {
+  if ((start_date != null && end_date == null) || (start_date == null && end_date != null)) {
     return res.status(400).json({ message: "Both start date and end date must be provided" })
   }
 
+  let where = {};
   if (req.body.user.role == "admin") {
-    if (company && !isCompanyExist(company)) {
-      return res.status(400).json({
-        message: "Company not found"
-      })
+    if (company != null) {
+      if (await isCompanyExist(company) == null) {
+        return res.status(400).json({
+          message: "Company not found"
+        })
+      }
+      where.username = company
     }
-
-
+  } else {
+    where.username = req.body.user.username;
   }
 
   try {
@@ -372,6 +375,28 @@ const viewTransaction = async (req, res) => {
     return res.status(400).json({ message: errorS })
   }
 
+  if (start_date && end_date) {
+    where.date = {
+      $gte: start_date + " 00:00",
+      $lte: end_date + " 23:59"
+    };
+  }
+
+  let project = { _id: 0 };
+  if (req.body.user.role == "company") project.username = 0;
+  let trans = await transCollection.find(where).project(project).toArray();
+
+  if (trans.length == 0) {
+    return res.json({ message: "No transactions occurred" })
+  }
+
+  let totalCharge = trans.reduce((sum, item) => sum + parseFloat(item.charge), 0);
+
+  return res.json({
+    number_of_transaction: trans.length,
+    total_charge: `$${totalCharge}`,
+    transactions: trans
+  })
 }
 
 module.exports = {
