@@ -1,5 +1,6 @@
 const Joi = require("joi");
 const jwt = require("jsonwebtoken");
+const moment = require("moment");
 const client = require("../database/database");
 require("dotenv").config();
 
@@ -97,16 +98,62 @@ const getEmployeeCompany = async (req, res) => {
   });
 };
 
-const viewAttendance = async (req, res) => {
+const viewAttendance = async (req, res) => {};
 
-}
+const employeeAttendance = async (req, res) => {
+  const username = req.body.user.username;
+  const currentDate = moment().format("YYYY-MM-DD");
 
-const absence = async (req, res) => {
+  try {
+    await client.connect();
+    const database = client.db("proyek_ws");
+    const userCollection = database.collection("users");
+    const scheduleCollection = database.collection("schedules");
 
-}
+    const employee = await userCollection.findOne({ username });
+    if (!employee || !employee.company) {
+      return res
+        .status(400)
+        .json({ message: "You are not associated with any company." });
+    }
 
-const viewSchedule = async (req, res) => {
+    const companyUsername = employee.company;
 
-}
+    const schedule = await scheduleCollection.findOne({
+      username: companyUsername,
+      date: currentDate,
+    });
 
-module.exports = { joinCompany, getEmployeeCompany, viewAttendance, absence, viewSchedule };
+    if (!schedule) {
+      return res.status(400).json({ message: "No schedule found for today." });
+    }
+
+    if (schedule.attendance.includes(username)) {
+      return res
+        .status(400)
+        .json({ message: "You have already marked attendance for today." });
+    }
+
+    await scheduleCollection.updateOne(
+      { _id: schedule._id },
+      { $push: { attendance: username } }
+    );
+
+    return res.status(200).json({ message: "Attendance marked successfully." });
+  } catch (error) {
+    console.error("Error marking attendance:", error);
+    return res.status(500).json({ message: "Internal server error." });
+  } finally {
+    await client.close();
+  }
+};
+
+const viewSchedule = async (req, res) => {};
+
+module.exports = {
+  joinCompany,
+  getEmployeeCompany,
+  viewAttendance,
+  employeeAttendance,
+  viewSchedule,
+};
