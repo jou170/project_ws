@@ -189,19 +189,13 @@ router.get(
   validateAccessToken,
   allowRoles(["employee"]),
   viewAttendance
-)
+);
 
 router.post(
   "/attendance",
   validateAccessToken,
   allowRoles(["employee"]),
   absence
-)
-
-router.get("/schedule",
-  validateAccessToken,
-  allowRoles(["employee"]),
-  viewSchedule
-)
+);
 
 module.exports = router;
