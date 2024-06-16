@@ -5,7 +5,9 @@ const {
   viewUserProfile,
   editUserProfileData,
   editUserProfilePicture,
-  deleteProfilePicture,
+  deleteUserProfilePicture,
+  viewUserProfilePicture,
+  viewTransaction,
 } = require("../controllers/UserController.js");
 
 const {
@@ -52,6 +54,14 @@ router.put(
   allowRoles(["employee", "company"]),
   editUserProfileData
 );
+
+router.get(
+  "/profile/picture",
+  validateAccessToken,
+  allowRoles(["employee", "company"]),
+  viewUserProfilePicture
+);
+
 router.put(
   "/profile/picture",
   validateAccessToken,
@@ -60,10 +70,17 @@ router.put(
 );
 
 router.delete(
-  "/profile/picture", 
-  validateAccessToken, 
+  "/profile/picture",
+  validateAccessToken,
   allowRoles(["employee", "company"]),
-  deleteProfilePicture
+  deleteUserProfilePicture
+)
+
+router.get(
+  "/transaction",
+  validateAccessToken,
+  allowRoles(["admin", "company"]),
+  viewTransaction
 )
 // Admin
 

@@ -28,7 +28,7 @@ const uploadPhoto = (username) => {
   return multer({
     storage: storageProfile(username),
     limits: {
-      fileSize: 20000000000, // dalam byte, jadi 1000 byte = 1kb, 1000000 byte = 1mb
+      fileSize: 1000000, // dalam byte, jadi 1000 byte = 1kb, 1000000 byte = 1mb
     },
     fileFilter: (req, file, callback) => {
       // file type yang diperbolehkan, dalam bentuk regex

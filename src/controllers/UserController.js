@@ -1,4 +1,4 @@
-const Joi = require("joi");
+const Joi = require("joi").extend(require("@joi/date"));
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const client = require("../database/database");
@@ -150,7 +150,7 @@ const register = async (req, res) => {
       role,
       phone_number,
       address,
-      profile_picture: "/uploads/default.jpg",
+      profile_picture: "/uploads/default.png",
       ...additionalProperties,
     });
 
@@ -181,7 +181,6 @@ const viewUserProfile = async (req, res) => {
     delete user._id;
     delete user.password;
     delete user.role;
-
     return res.status(200).json(user);
   } catch (error) {
     console.error(error);
@@ -267,16 +266,20 @@ const editUserProfileData = async (req, res) => {
   }
 };
 
+const viewUserProfilePicture = async (req, res) => {
+  return res.status(200).sendFile(req.body.user.profile_picture, { root: "." });
+}
+
 const editUserProfilePicture = async (req, res) => {
   let user = req.body.user;
   const upload = uploadPhoto(user.username).single("profile_picture");
 
-  try {
-    upload(req, res, async function (err) {
-      if (err) {
-        return res.status(400).json({ message: err.message });
-      }
+  upload(req, res, async function (err) {
+    if (err) {
+      return res.status(400).json({ message: err.message });
+    }
 
+    try {
       await client.connect();
       const database = client.db("proyek_ws");
       const collection = database.collection("users");
@@ -284,27 +287,24 @@ const editUserProfilePicture = async (req, res) => {
       await collection.updateOne(
         { username: user.username },
         { $set: { profile_picture: `/uploads/${req.file.filename}` } }
-      )
-    });
-
-    return res.json({ message: "Update profile picture successfully." });
-
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: `Error : ${err}`,
-    });
-  }
-
+      );
+      return res.json({ message: "Update profile picture successfully." });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: `Error : ${err}`,
+      });
+    }
+  });
 };
 
-const deleteProfilePicture = async (req, res) => {
+const deleteUserProfilePicture = async (req, res) => {
 
   const filename = req.body.user.profile_picture;
   if (filename.includes("default")) {
     return res.status(400).json({ message: "Profile picture has been deleted before" })
   }
-  const filePath = "./" + filename; 
+  const filePath = "./" + filename;
 
   fs.unlink(filePath, async (err) => {
     if (err) {
@@ -318,7 +318,7 @@ const deleteProfilePicture = async (req, res) => {
     try {
       await collection.updateOne(
         { username: req.body.user.username },
-        { $set: { profile_picture: "/uploads/default.jpg" } }
+        { $set: { profile_picture: "/uploads/default.png" } }
       );
 
       return res.status(200).json({ message: "Delete Profile Picture Successfully" });
@@ -329,12 +329,58 @@ const deleteProfilePicture = async (req, res) => {
   });
 };
 
+const isCompanyExist = async (company) => {
+  await client.connect();
+  const collection = client.db("proyek_ws").collection("users");
+
+  let comp = await collection.findOne({
+    username: company
+  })
+
+  return comp;
+}
+
+const viewTransactionAdminSchema = Joi.object({
+  start_date: Joi.date().format("YYYY-MM-DD").optional(),
+  end_date: Joi.date().format("YYYY-MM-DD").optional(),
+});
+
+const viewTransaction = async (req, res) => {
+
+  const transCollection = client.db("proyek_ws").collection("transactions");
+  const { company, start_date, end_date } = req.query;
+
+  
+  if ((start_date && !end_date) || (!start_date && end_date)) {
+    return res.status(400).json({ message: "Both start date and end date must be provided" })
+  }
+
+  if (req.body.user.role == "admin") {
+    if (company && !isCompanyExist(company)) {
+      return res.status(400).json({
+        message: "Company not found"
+      })
+    }
+
+
+  }
+
+  try {
+    await viewTransactionAdminSchema.validateAsync({ start_date, end_date });
+  } catch (error) {
+    let errorS = error.toString().split(": ")[1];
+    return res.status(400).json({ message: errorS })
+  }
+
+}
 
 module.exports = {
   login,
   register,
   viewUserProfile,
   editUserProfileData,
+  viewUserProfilePicture,
   editUserProfilePicture,
-  deleteProfilePicture
+  deleteUserProfilePicture,
+  viewTransaction
 };
