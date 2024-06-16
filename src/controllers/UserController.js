@@ -1,4 +1,4 @@
-const Joi = require("joi");
+const Joi = require("joi").extend(require("@joi/date"));
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const client = require("../database/database");
@@ -329,6 +329,51 @@ const deleteUserProfilePicture = async (req, res) => {
   });
 };
 
+const isCompanyExist = async (company) => {
+  await client.connect();
+  const collection = client.db("proyek_ws").collection("users");
+
+  let comp = await collection.findOne({
+    username: company
+  })
+
+  return comp;
+}
+
+const viewTransactionAdminSchema = Joi.object({
+  start_date: Joi.date().format("YYYY-MM-DD").optional(),
+  end_date: Joi.date().format("YYYY-MM-DD").optional(),
+});
+
+const viewTransaction = async (req, res) => {
+
+  const transCollection = client.db("proyek_ws").collection("transactions");
+  const { company, start_date, end_date } = req.query;
+
+  
+  if ((start_date && !end_date) || (!start_date && end_date)) {
+    return res.status(400).json({ message: "Both start date and end date must be provided" })
+  }
+
+  if (req.body.user.role == "admin") {
+    if (company && !isCompanyExist(company)) {
+      return res.status(400).json({
+        message: "Company not found"
+      })
+    }
+
+
+  }
+
+  try {
+    await viewTransactionAdminSchema.validateAsync({ start_date, end_date });
+  } catch (error) {
+    let errorS = error.toString().split(": ")[1];
+    return res.status(400).json({ message: errorS })
+  }
+
+}
+
 module.exports = {
   login,
   register,
@@ -336,5 +381,6 @@ module.exports = {
   editUserProfileData,
   viewUserProfilePicture,
   editUserProfilePicture,
-  deleteUserProfilePicture
+  deleteUserProfilePicture,
+  viewTransaction
 };

@@ -353,6 +353,8 @@ const createSchedule = async (req, res) => {
       { $set: { balance: newBalance } }
     );
 
+    let success_date = [];
+
     for (
       let date = startDate.clone();
       date.isSameOrBefore(endDate);
@@ -373,6 +375,8 @@ const createSchedule = async (req, res) => {
           day,
           attendance: [],
         });
+
+        success_date.push(dateString);
       }
     }
 
@@ -382,10 +386,11 @@ const createSchedule = async (req, res) => {
       username: username,
       type: "Create schedules",
       date: formateddate(),
-      startDate: start_date,
-      endDate: end_date,
+      start_date: start_date,
+      end_date: end_date,
+      charge: charge.toFixed(2),
       number_of_schedules: activeDays,
-      charge: charge.toFixed(2)
+      schedules: success_date
     })
 
     if (insertTrans.modifiedCount === 0) {
@@ -395,7 +400,8 @@ const createSchedule = async (req, res) => {
     return res.status(201).json({
       message: "Schedule created successfully",
       charge: `$${charge.toFixed(2)}`,
-      active_day: `${activeDays} days`,
+      number_of_active_day: `${activeDays} days`,
+      active_days: success_date,
       off_days: offDays,
       existing_days: existingDays,
     });
@@ -574,7 +580,9 @@ const deleteSchedule = async (req, res) => {
       username: username,
       type: `Delete schedules`,
       date: formateddate(),
-      charge: charge.toFixed(2)
+      charge: charge.toFixed(2),
+      number_of_deleted_schedules: deletedSchedules.length,
+      deleted_schedules: deletedSchedules,
     })
 
     if (trans.modifiedCount === 0) {
