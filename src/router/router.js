@@ -74,14 +74,14 @@ router.delete(
   validateAccessToken,
   allowRoles(["employee", "company"]),
   deleteUserProfilePicture
-)
+);
 
 router.get(
   "/transaction",
   validateAccessToken,
   allowRoles(["admin", "company"]),
   viewTransaction
-)
+);
 // Admin
 
 router.get(
@@ -120,7 +120,7 @@ router.post(
 router.get(
   "/schedule",
   validateAccessToken,
-  allowRoles(["company"]),
+  allowRoles(["company", "employee"]),
   getSchedule
 );
 router.delete(
