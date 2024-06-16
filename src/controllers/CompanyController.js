@@ -420,7 +420,7 @@ const getScheduleSchema = Joi.object({
     .min(1)
     .max(12)
     .default(moment().month() + 1), //default bulan ini
-  year: Joi.number().integer().min(2023).default(moment().year()), //default tahun ini
+  year: Joi.number().integer().min(2024).default(moment().year()), //default tahun ini
   limit: Joi.number()
     .integer()
     .min(1)

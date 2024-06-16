@@ -97,4 +97,16 @@ const getEmployeeCompany = async (req, res) => {
   });
 };
 
-module.exports = { joinCompany, getEmployeeCompany };
+const viewAttendance = async (req, res) => {
+
+}
+
+const absence = async (req, res) => {
+
+}
+
+const viewSchedule = async (req, res) => {
+
+}
+
+module.exports = { joinCompany, getEmployeeCompany, viewAttendance, absence, viewSchedule };

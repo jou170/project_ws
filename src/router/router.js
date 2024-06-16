@@ -37,6 +37,9 @@ const {
 const {
   joinCompany,
   getEmployeeCompany,
+  viewAttendance,
+  absence,
+  viewSchedule,
 } = require("../controllers/EmployeeController.js");
 
 // General
@@ -180,5 +183,25 @@ router.get(
   allowRoles(["employee"]),
   getEmployeeCompany
 );
+
+router.get(
+  "/attendance",
+  validateAccessToken,
+  allowRoles(["employee"]),
+  viewAttendance
+)
+
+router.post(
+  "/attemdance",
+  validateAccessToken,
+  allowRoles(["employee"]),
+  absence
+)
+
+router.get("/schedule",
+  validateAccessToken,
+  allowRoles(["employee"]),
+  viewSchedule
+)
 
 module.exports = router;
