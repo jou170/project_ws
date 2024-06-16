@@ -4,6 +4,8 @@ const crypto = require("crypto");
 
 faker.seed(42);
 
+let usedEmployees = [];
+
 async function createEmployeeData() {
   const sex = faker.person.sexType();
   const firstName = faker.person.firstName(sex);
@@ -28,6 +30,7 @@ async function createEmployeeData() {
     company: "",
   };
 }
+
 async function createAdminData() {
   const sex = faker.person.sexType();
   const firstName = faker.person.firstName(sex);
@@ -52,19 +55,19 @@ async function createAdminData() {
     company: "",
   };
 }
+
 async function createCompaniesData() {
   const name = faker.company.name();
   const splitName = name.split(/[\s\W]+/);
-  const email = `${splitName[0]}${splitName[1]}@gmail.com`;
-  const username = `${splitName[0]}${splitName[1]}`;
+  const email = `${splitName[0].toLowerCase()}@gmail.com`;
+  const username = `${splitName[0].toLowerCase()}`;
   const phone_number = faker.helpers.fromRegExp(/0[38]{1}1[0-9]{7,10}/);
   const address = faker.location.streetAddress({ useFullAddress: true });
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash("12345678", salt);
-  await client.connect();
-  const database = client.db("proyek_ws");
+  const database = client.db("coba");
   const collection = database.collection("users");
-  const invitationCode = generateInvitationCode(collection);
+  const invitationCode = await generateInvitationCode(collection);
 
   return {
     username: username,
@@ -83,12 +86,65 @@ async function createCompaniesData() {
   };
 }
 
+async function createCompaniesWithEmployeeData(client) {
+  const name = faker.company.name();
+  const splitName = name.split(/[\s\W]+/);
+  const email = `${splitName[0].toLowerCase()}@gmail.com`;
+  const username = `${splitName[0].toLowerCase()}`;
+  const phone_number = faker.helpers.fromRegExp(/0[38]{1}1[0-9]{7,10}/);
+  const address = faker.location.streetAddress({ useFullAddress: true });
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash("12345678", salt);
+
+  const database = client.db("coba");
+  const collection = database.collection("users");
+
+  let isUnique = false;
+  let employee;
+
+  while (!isUnique) {
+    employee = await collection.findOne({
+      role: "employee",
+      company: "",
+    });
+    if (employee && !usedEmployees.includes(employee.username)) {
+      isUnique = true;
+    }
+  }
+  const invitationCode = await generateInvitationCode(collection);
+
+  const companyData = {
+    username: username,
+    email: email,
+    name: name,
+    password: hashedPassword,
+    role: "company",
+    phone_number: phone_number,
+    address: address,
+    profile_picture: "/uploads/default.jpg",
+    balance: 0,
+    plan_type: "free",
+    invitation_code: invitationCode,
+    invitation_limit: 9,
+    employees: [employee.username],
+  };
+
+  await collection.insertOne(companyData);
+  await collection.updateOne(
+    { username: employee.username },
+    { $set: { company: name } }
+  );
+
+  usedEmployees.push(employee.username);
+  return companyData;
+}
+
 const generateInvitationCode = async (collection) => {
   let isUnique = false;
   let invitationCode;
 
   while (!isUnique) {
-    const buffer = await crypto.randomBytes(6);
+    const buffer = crypto.randomBytes(6);
 
     invitationCode = buffer.toString("hex").toUpperCase();
 
@@ -110,6 +166,7 @@ function createEmployeeDatas(n) {
   }
   return users;
 }
+
 function createAdminDatas(n) {
   const users = [];
   for (let i = 0; i < n; i++) {
@@ -117,6 +174,7 @@ function createAdminDatas(n) {
   }
   return users;
 }
+
 function createCompaniesDatas(n) {
   const users = [];
   for (let i = 0; i < n; i++) {
@@ -125,49 +183,16 @@ function createCompaniesDatas(n) {
   return users;
 }
 
-// function createRandomPost() {
-//   const n = faker.number.int({ min: 0, max: 10 });
-//   const comments = [];
-//   const postDate = faker.date.recent({ days: 365 });
-//   for (let i = 0; i < n; i++) {
-//     comments.push({
-//       content: faker.lorem.sentence(),
-//       createdAt: faker.date.soon({ days: 100, refDate: postDate }),
-//     });
-//   }
-//   return {
-//     title: faker.lorem.sentence(),
-//     content: faker.lorem.paragraph(),
-//     createdAt: postDate,
-//     comments: comments,
-//   };
-// }
-
-// function createRandomPosts(n, accounts) {
-//   const posts = [];
-//   const usernames = accounts.map((a) => a._id);
-//   const accountsSmall = accounts.map((a) => ({
-//     _id: a._id,
-//     avatar: a.avatar,
-//   }));
-//   for (let i = 0; i < n; i++) {
-//     const post = createRandomPost();
-//     post.author = faker.helpers.arrayElement(usernames);
-//     post.likes = faker.helpers.arrayElements(
-//       usernames,
-//       faker.number.int({ min: 0, max: 10 })
-//     );
-//     for (let j = 0; j < post.comments.length; j++) {
-//       post.comments[j].commenter = faker.helpers.arrayElement(accountsSmall);
-//     }
-//     posts.push(post);
-//   }
-//   return posts;
-// }
+function createCompaniesWithEmployeeDatas(n, client) {
+  const users = [];
+  for (let i = 0; i < n; i++) {
+    users.push(createCompaniesWithEmployeeData(client));
+  }
+  return users;
+}
 
 const { MongoClient } = require("mongodb");
 const url = "mongodb://localhost:27017";
-// 4 dan 6 itu menandakan kita mau pakai IPv4 atau IPv6
 const client = new MongoClient(url, { family: 4 });
 const dbName = "coba";
 
@@ -178,35 +203,26 @@ const main = async () => {
 
     const employeePromises = createEmployeeDatas(10);
     const adminPromises = createAdminDatas(2);
-    const companyPromises = createCompaniesDatas(3);
+    const companyPromises = createCompaniesDatas(2);
+    const companyEmpPromises = createCompaniesWithEmployeeDatas(3, client);
 
     const employees = await Promise.all(employeePromises);
     const admins = await Promise.all(adminPromises);
     const companies = await Promise.all(companyPromises);
+    const companiesEmp = await Promise.all(companyEmpPromises);
 
     await database.dropDatabase();
     await database.collection("users").insertMany(employees);
     await database.collection("users").insertMany(admins);
     await database.collection("users").insertMany(companies);
+    await database.collection("users").insertMany(companiesEmp);
 
-    const query = { fullName: /ow/ };
-    const projection = { username: 1, name: 1 };
-    const options = { limit: 5, skip: 1 };
-
-    const result = await database
-      .collection("users")
-      .find(query, { projection })
-      .limit(options.limit)
-      .skip(options.skip)
-      .toArray();
-
-    console.log(result);
     console.log("OK");
   } catch (error) {
-    console.log(error);
+    console.error(error);
   } finally {
     await client.close();
-    process.exit(0); // Exit Node.js process
+    process.exit(0);
   }
 };
 
