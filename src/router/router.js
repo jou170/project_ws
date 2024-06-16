@@ -192,7 +192,7 @@ router.get(
 )
 
 router.post(
-  "/attemdance",
+  "/attendance",
   validateAccessToken,
   allowRoles(["employee"]),
   absence
