@@ -161,8 +161,9 @@ async function createTopUp(client) {
   );
 
   let unique = false;
-  while (!unique) {
-    randomIndex = Math.floor(Math.random() * availableCompanies.length);
+  let company;
+  while (!unique && availableCompanies.length > 0) {
+    let randomIndex = Math.floor(Math.random() * availableCompanies.length);
     company = availableCompanies[randomIndex];
 
     if (!usedCompany.includes(company.username)) {
@@ -171,8 +172,8 @@ async function createTopUp(client) {
     }
   }
 
-  let random = Math.floor(Math.random() * 3) + 1;
-  let randomAmount = Math.floor(Math.random() * (500 - 10 + 1)) + 10;
+  let random = Math.floor(Math.random() * 5) + 1;
+  let randomAmount = Math.floor(Math.random() * (100 - 50 + 1)) + 50;
   let currentDate = new Date();
   let datetime = `${currentDate.getFullYear()}-${padNumber(
     currentDate.getMonth() + 1
@@ -192,7 +193,7 @@ async function createTopUp(client) {
       created: datetime,
     };
     await database.collection("topups").insertOne(topup);
-  } else if (random === 2) {
+  } else if (random === 2 || random == 3 || random == 4) {
     topup = {
       _id: new ObjectId(),
       topup_id: topup_id,
@@ -212,7 +213,24 @@ async function createTopUp(client) {
         { username: company.username },
         { $set: { balance: newBalance } }
       );
-  } else if (random === 3) {
+
+    let randomNum = Math.floor(Math.random() * 3) + 1;
+    if (randomNum == 1 || randomNum == 3) {
+      newBalance = newBalance - 30;
+      await database
+        .collection("users")
+        .updateOne(
+          { username: company.username },
+          { $set: { balance: newBalance, plan_type: "standard" } }
+        );
+      await database.collection("transactions").insertOne({
+        username: company.username,
+        type: `Upgrade plan type from free to standard`,
+        date: datetime,
+        charge: 30,
+      });
+    }
+  } else if (random === 5) {
     topup = {
       _id: new ObjectId(),
       topup_id: topup_id,
@@ -316,7 +334,7 @@ const main = async () => {
     const companyEmpPromises = createCompaniesWithEmployeeDatas(4, client);
     await Promise.all(companyEmpPromises);
 
-    const topUpPromises = createTopUpDatas(5, client);
+    const topUpPromises = createTopUpDatas(6, client);
     await Promise.all(topUpPromises);
 
     console.log("OK");
