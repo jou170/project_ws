@@ -26,14 +26,14 @@ const viewEmployeePicture = async (req, res) => {
   let employee = await collection.findOne({ username, role: "employee" });
   if (!employee) {
     return res.status(404).json({
-      message: "Employee not found"
-    })
+      message: "Employee not found",
+    });
   }
 
   if (employee.company != req.body.user.username) {
     return res.status(403).json({
-      message: "This employee is not associated with this company"
-    })
+      message: "This employee is not associated with this company",
+    });
   }
 
   return res.status(200).sendFile(employee.profile_picture, { root: "." });
@@ -54,9 +54,6 @@ const getEmployees = async (req, res) => {
   const { name, offset } = req.query;
   let { limit } = req.query;
   const { user } = req.body;
-  if (!limit) {
-    limit = 10;
-  }
   const { error } = getEmployeesSchema.validate({ name, limit, offset });
 
   if (error) {
@@ -100,6 +97,9 @@ const getEmployees = async (req, res) => {
         limit * offset
       );
     } else if (limit) {
+      employeeDetails = employeeDetails.slice(0, limit);
+    } else if (!limit) {
+      limit = 10;
       employeeDetails = employeeDetails.slice(0, limit);
     }
 
@@ -508,9 +508,12 @@ const getSchedule = async (req, res) => {
 
     // Apply pagination if limit and offset are provided
     if (limit && offset) {
-      schedules = schedules.slice(limit * (offset - 1), limit * offset);
+      companies = companies.slice(limit * (offset - 1), limit * offset);
     } else if (limit) {
-      schedules = schedules.slice(0, limit);
+      companies = companies.slice(0, limit);
+    } else if (!limit) {
+      limit = 10;
+      companies = companies.slice(0, limit);
     }
 
     const company = await userCollection.findOne({ username });

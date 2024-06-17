@@ -13,7 +13,7 @@ async function createEmployeeData() {
   const name = `${firstName} ${lastName}`;
   const email = `${firstName.toLowerCase()}@gmail.com`;
   const username = `${firstName.toLowerCase()}`;
-  const phone_number = faker.helpers.fromRegExp(/0[38]{1}1[0-9]{7,10}/);
+  const phone_number = faker.helpers.fromRegExp(/0[38]{1}1[0-9]{9}/);
   const address = faker.location.streetAddress({ useFullAddress: true });
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash("12345678", salt);
@@ -38,8 +38,6 @@ async function createAdminData() {
   const name = `${firstName} ${lastName}`;
   const email = `${firstName.toLowerCase()}@gmail.com`;
   const username = `${firstName.toLowerCase()}`;
-  const phone_number = faker.helpers.fromRegExp(/0[38]{1}1[0-9]{7,10}/);
-  const address = faker.location.streetAddress({ useFullAddress: true });
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash("12345678", salt);
 
@@ -49,10 +47,6 @@ async function createAdminData() {
     name: name,
     password: hashedPassword,
     role: "admin",
-    phone_number: phone_number,
-    address: address,
-    profile_picture: "/uploads/default.jpg",
-    company: "",
   };
 }
 
@@ -61,7 +55,7 @@ async function createCompaniesData() {
   const splitName = name.split(/[\s\W]+/);
   const email = `${splitName[0].toLowerCase()}@gmail.com`;
   const username = `${splitName[0].toLowerCase()}`;
-  const phone_number = faker.helpers.fromRegExp(/0[38]{1}1[0-9]{7,10}/);
+  const phone_number = faker.helpers.fromRegExp(/0[38]{1}1[0-9]{9}/);
   const address = faker.location.streetAddress({ useFullAddress: true });
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash("12345678", salt);
@@ -91,7 +85,7 @@ async function createCompaniesWithEmployeeData(client) {
   const splitName = name.split(/[\s\W]+/);
   const email = `${splitName[0].toLowerCase()}@gmail.com`;
   const username = `${splitName[0].toLowerCase()}`;
-  const phone_number = faker.helpers.fromRegExp(/0[38]{1}1[0-9]{7,10}/);
+  const phone_number = faker.helpers.fromRegExp(/0[38]{1}1[0-9]{9}/);
   const address = faker.location.streetAddress({ useFullAddress: true });
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash("12345678", salt);
