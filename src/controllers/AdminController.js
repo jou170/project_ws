@@ -59,7 +59,7 @@ const getCompaniesByUsername = async (req, res) => {
       .find(
         { username: username },
         { role: "company" },
-        { projection: { username: 1, name: 1, plan_type: 1, employees: 1 } } // Include name, plan_type, and employee fields
+        { projection: { username: 1, name: 1, plan_type: 1, employees: 1 } }
       )
       .toArray();
 
@@ -73,7 +73,7 @@ const getCompaniesByUsername = async (req, res) => {
         name: company.name,
         plan_type: company.plan_type,
         total_employee: company.employees.length,
-        total_spent: 0, // Assuming total_spent is 0 for now
+        total_spent: 0,
       })),
     };
 

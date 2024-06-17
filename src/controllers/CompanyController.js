@@ -26,14 +26,14 @@ const viewEmployeePicture = async (req, res) => {
   let employee = await collection.findOne({ username, role: "employee" });
   if (!employee) {
     return res.status(404).json({
-      message: "Employee not found"
-    })
+      message: "Employee not found",
+    });
   }
 
   if (employee.company != req.body.user.username) {
     return res.status(403).json({
-      message: "This employee is not associated with this company"
-    })
+      message: "This employee is not associated with this company",
+    });
   }
 
   return res.status(200).sendFile(employee.profile_picture, { root: "." });
@@ -196,7 +196,6 @@ const removeEmployeesFromCompany = async (req, res) => {
   try {
     await client.connect();
     const database = client.db("proyek_ws");
-    let employeeDetail;
     const mainUser = await database
       .collection("users")
       .aggregate([
@@ -241,36 +240,65 @@ const removeEmployeesFromCompany = async (req, res) => {
   }
 };
 
-const getNextScheduleId = async (collection) => {
-  const lastSchedule = await collection
-    .find()
-    .sort({ schedule_id: -1 })
-    .limit(1)
-    .toArray();
-  return lastSchedule.length > 0 ? lastSchedule[0].schedule_id + 1 : 1;
+const addDays = (date, days) => {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
 };
+
+const endOfYear = () => {
+  const now = new Date();
+  return new Date(now.getFullYear(), 11, 31);
+};
+
+const formatDate = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const scheduleSchema = Joi.object({
   start_date: Joi.date()
-    .format("YYYY-MM-DD")
-    .min(moment().add(1, "days").format("YYYY-MM-DD"))
-    .max(moment().endOf("year").format("YYYY-MM-DD"))
-    .required(),
+    .iso()
+    .min(formatDate(addDays(new Date(), 1)))
+    .max(formatDate(endOfYear()))
+    .required()
+    .messages({
+      "date.min": `start_date must be greater than or equal to ${formatDate(
+        addDays(new Date(), 1)
+      )}`,
+      "date.max": `start_date must be less than or equal to ${formatDate(
+        endOfYear()
+      )}`,
+      "date.base": `start_date must be a valid date`,
+      "date.format": `start_date must be in the format YYYY-MM-DD`,
+    }),
   end_date: Joi.date()
-    .format("YYYY-MM-DD")
+    .iso()
     .min(Joi.ref("start_date"))
-    .max(moment().endOf("year").format("YYYY-MM-DD"))
-    .required(),
+    .max(formatDate(endOfYear()))
+    .required()
+    .messages({
+      "date.min": `end_date must be greater than or equal to start_date`,
+      "date.max": `end_date must be less than or equal to ${formatDate(
+        endOfYear()
+      )}`,
+      "date.base": `start_date must be a valid date`,
+      "date.format": `start_date must be in the format YYYY-MM-DD`,
+    }),
 });
+
 const createSchedule = async (req, res) => {
   const { start_date, end_date } = req.body;
   const username = req.body.user.username;
 
-  // Validate the request body
   const { error } = scheduleSchema.validate({ start_date, end_date });
   if (error) {
-    return res.status(400).json({
-      message: error.details.map((detail) => detail.message).join("; "),
-    });
+    const errorMessage = error.details
+      .map((detail) => detail.message.replace(/"/g, ""))
+      .join("; ");
+    return res.status(400).json({ message: errorMessage });
   }
 
   try {
@@ -278,7 +306,6 @@ const createSchedule = async (req, res) => {
     const database = client.db("proyek_ws");
     const collection = database.collection("schedules");
 
-    // Fetch public holidays from the Dayoff API
     const response = await axios.get("https://dayoffapi.vercel.app/api", {
       params: { year: moment(start_date).year() },
     });
@@ -296,7 +323,6 @@ const createSchedule = async (req, res) => {
     let offDays = [];
     let existingDays = [];
 
-    // Fetch existing schedules for the company within the date range
     const existingSchedules = await collection
       .find({
         username,
@@ -337,7 +363,7 @@ const createSchedule = async (req, res) => {
     if (activeDays === 0) {
       return res.status(400).json({
         message:
-          "No schedules were created as all dates are either holidays, weekends, or already scheduled.",
+          "No schedules were created as all dates are either holidays, weekends, or already scheduled",
       });
     }
 
@@ -375,7 +401,6 @@ const createSchedule = async (req, res) => {
 
       if (!isWeekend && !holiday && !isAlreadyScheduled) {
         await collection.insertOne({
-          schedule_id: await getNextScheduleId(collection),
           username,
           date: dateString,
           day,
@@ -420,14 +445,27 @@ const createSchedule = async (req, res) => {
   }
 };
 
+const validateDate = (value, helpers) => {
+  const { day, month, year } = helpers.state.ancestors[0];
+  if (day && month && year) {
+    const date = new Date(year, month - 1, day);
+    if (date.getDate() !== day) {
+      return helpers.error("any.invalid");
+    }
+  }
+  return value;
+};
+
 const getScheduleSchema = Joi.object({
-  day: Joi.number().integer().min(1).max(31).optional(),
-  month: Joi.number()
-    .integer()
-    .min(1)
-    .max(12)
-    .default(moment().month() + 1), //default bulan ini
-  year: Joi.number().integer().min(2024).default(moment().year()), //default tahun ini
+  start_date: Joi.date().iso().optional().messages({
+    "date.base": `start_date must be a valid date`,
+    "date.format": `start_date must be in the format YYYY-MM-DD`,
+  }),
+  end_date: Joi.date().iso().min(Joi.ref("start_date")).optional().messages({
+    "date.base": `end_date must be a valid date`,
+    "date.format": `end_date must be in the format YYYY-MM-DD`,
+    "date.min": `end_date must be greater than or equal to start_date`,
+  }),
   limit: Joi.number()
     .integer()
     .min(1)
@@ -435,30 +473,35 @@ const getScheduleSchema = Joi.object({
     .default(10)
     .when("offset", { is: Joi.exist(), then: Joi.required() }),
   offset: Joi.number().integer().min(1).optional(),
+}).custom((value, helpers) => {
+  if (
+    (value.start_date && !value.end_date) ||
+    (!value.start_date && value.end_date)
+  ) {
+    return helpers.message(
+      "Both start_date and end_date must be provided together, or neither"
+    );
+  }
+  return value;
 });
 
 const getSchedule = async (req, res) => {
-  const { day, month, year, limit, offset } = req.query;
+  const { start_date, end_date, limit, offset } = req.query;
 
-  let user = req.body.user;
-  let username;
-  if (user.role == "company") {
-    username = user.username;
-  } else {
-    username = user.company;
-  }
+  const user = req.body.user;
+  const username = user.role == "company" ? user.username : user.company;
 
   const { error } = getScheduleSchema.validate({
-    day,
-    month,
-    year,
+    start_date,
+    end_date,
     limit,
     offset,
   });
   if (error) {
-    return res.status(400).json({
-      message: error.details.map((detail) => detail.message).join("; "),
-    });
+    const errorMessage = error.details
+      .map((detail) => detail.message.replace(/"/g, ""))
+      .join("; ");
+    return res.status(400).json({ message: errorMessage });
   }
 
   try {
@@ -468,45 +511,23 @@ const getSchedule = async (req, res) => {
     const userCollection = database.collection("users");
 
     const employee = await userCollection.findOne({ username });
-    if (!employee || !employee.company) {
+    if (user.role == "employee" && employee.company == "") {
       return res
         .status(400)
         .json({ message: "You are not associated with any company" });
     }
 
-    let startDate, endDate;
-    if (day) {
-      startDate = moment({ year, month: month - 1, day })
-        .startOf("day")
-        .format("YYYY-MM-DD");
-      endDate = moment({ year, month: month - 1, day })
-        .endOf("day")
-        .format("YYYY-MM-DD");
-    } else {
-      startDate = moment({ year, month: month - 1 })
-        .startOf("month")
-        .format("YYYY-MM-DD");
-      endDate = moment({ year, month: month - 1 })
-        .endOf("month")
-        .format("YYYY-MM-DD");
+    let query = { username };
+    if (start_date && end_date) {
+      query.date = { $gte: start_date, $lte: end_date };
     }
 
-    let schedules = [];
-
-    // Fetch schedules for the specified date range
-
-    schedules = await scheduleCollection
-      .find({
-        username,
-        date: { $gte: startDate, $lte: endDate },
-      })
-      .project({
-        _id: 0,
-        username: 0,
-      })
+    let schedules = await scheduleCollection
+      .find(query)
+      .sort({ date: 1 })
+      .project({ _id: 0, username: 0 })
       .toArray();
 
-    // Apply pagination if limit and offset are provided
     if (limit && offset) {
       schedules = schedules.slice(limit * (offset - 1), limit * offset);
     } else if (limit) {
@@ -515,12 +536,11 @@ const getSchedule = async (req, res) => {
 
     const company = await userCollection.findOne({ username });
     const employeeUsernames = company.employees || [];
-
     const employeeDetails = await userCollection
       .find({ username: { $in: employeeUsernames } })
       .toArray();
 
-    if (user.roles == "company") {
+    if (user.role == "company") {
       schedules = schedules.map((schedule) => {
         const attendanceSet = new Set(schedule.attendance);
         return {
@@ -535,11 +555,18 @@ const getSchedule = async (req, res) => {
     } else {
       schedules = schedules.map((schedule) => {
         const attendanceSet = new Set(schedule.attendance);
+        const { attendance, ...rest } = schedule;
         return {
-          ...schedule,
-          attendance: attendanceSet.has(user.username),
+          ...rest,
+          attend: attendanceSet.has(user.username),
         };
       });
+    }
+
+    if (schedules.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "No schedules found within the specified filter" });
     }
 
     return res.status(200).json({ schedules });
@@ -552,11 +579,19 @@ const getSchedule = async (req, res) => {
 };
 
 const deleteScheduleSchema = Joi.object({
-  start_date: Joi.date().format("YYYY-MM-DD").required(),
+  start_date: Joi.date().format("YYYY-MM-DD").required().messages({
+    "date.base": `start_date must be a valid date`,
+    "date.format": `start_date must be in the format YYYY-MM-DD`,
+  }),
   end_date: Joi.date()
     .format("YYYY-MM-DD")
     .min(Joi.ref("start_date"))
-    .required(),
+    .required()
+    .messages({
+      "date.base": `end_date must be a valid date`,
+      "date.format": `end_date must be in the format YYYY-MM-DD`,
+      "date.min": `end_date must be greater than or equal to start_date`,
+    }),
 });
 
 const deleteSchedule = async (req, res) => {
@@ -565,11 +600,11 @@ const deleteSchedule = async (req, res) => {
 
   const { error } = deleteScheduleSchema.validate({ start_date, end_date });
   if (error) {
-    return res.status(400).json({
-      message: error.details.map((detail) => detail.message).join("; "),
-    });
+    const errorMessage = error.details
+      .map((detail) => detail.message.replace(/"/g, ""))
+      .join("; ");
+    return res.status(400).json({ message: errorMessage });
   }
-
   try {
     await client.connect();
     const database = client.db("proyek_ws");
@@ -600,14 +635,12 @@ const deleteSchedule = async (req, res) => {
       return res.status(404).json({ message: "Company not found" });
     }
 
-    // Deduct balance
     let charge = deletedSchedules.length * 0.1;
     charge = parseFloat(charge.toFixed(2));
 
     let newBalance = parseFloat(company.balance) - charge;
     newBalance = parseFloat(newBalance.toFixed(2));
 
-    // Update the company's balance
     await companyCollection.updateOne(
       { username },
       { $set: { balance: newBalance } }
@@ -840,7 +873,6 @@ const amountSchema = Joi.object({
     .max(1000)
     .required()
     .custom((value, helpers) => {
-      // Check if value has more than two decimal places
       if (value.toFixed(2) != value) {
         return helpers.error("amount.invalid");
       }

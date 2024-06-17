@@ -53,13 +53,11 @@ const joinCompany = async (req, res) => {
     });
   }
 
-  // update user
   await collection.updateOne(
     { username: user.username },
     { $set: { company: company.username } }
   );
 
-  // push employee to user
   await collection.updateOne(
     { username: company.username },
     {
@@ -123,7 +121,7 @@ const employeeAttendance = async (req, res) => {
     });
 
     if (!schedule) {
-      return res.status(400).json({ message: "No schedule found for today." });
+      return res.status(400).json({ message: "No schedule for today." });
     }
 
     if (schedule.attendance.includes(username)) {
