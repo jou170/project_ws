@@ -7,7 +7,8 @@ const getCompanies = async (req, res) => {
   try {
     await client.connect();
     const database = client.db("proyek_ws");
-    const collection = await database
+
+    const companies = await database
       .collection("users")
       .find(
         { role: "company" },
@@ -15,20 +16,34 @@ const getCompanies = async (req, res) => {
       )
       .toArray();
 
-    const result = {
-      companies: collection.map((company) => ({
+    const companyPromises = companies.map(async (company) => {
+      const transactions = await database
+        .collection("transactions")
+        .find({ username: company.username })
+        .toArray();
+
+      const totalSpent = transactions.reduce((sum, transaction) => {
+        const charge = parseFloat(transaction.charge);
+        return sum + (isNaN(charge) ? 0 : charge);
+      }, 0);
+
+      return {
         username: company.username,
         name: company.name,
         plan_type: company.plan_type,
         total_employee: company.employees.length,
-        total_spent: 0,
-      })),
+        total_spent: `$${totalSpent.toFixed(2)}`,
+      };
+    });
+
+    const result = {
+      companies: await Promise.all(companyPromises),
     };
 
     return res.status(200).json(result);
   } catch (error) {
     console.error("Error fetching user data:", error);
-    return res.status(500).send("Internal server error");
+    return res.status(500).send({ message: "Internal server error" });
   } finally {
     await client.close();
   }
@@ -230,7 +245,7 @@ const getTopUpRequest = async (req, res) => {
     return res.status(200).json(collection);
   } catch (error) {
     console.error("Error fetching user data:", error);
-    return res.status(500).send("Internal server error");
+    return res.status(500).send({ message: "Internal server error" });
   } finally {
     await client.close();
   }
@@ -308,7 +323,7 @@ const editTopUpRequest = async (req, res) => {
     }
   } catch (error) {
     console.error("Error fetching user data:", error);
-    return res.status(500).send("Internal server error");
+    return res.status(500).send({ message: "Internal server error" });
   } finally {
     await client.close();
   }

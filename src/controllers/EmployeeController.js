@@ -87,7 +87,6 @@ const getEmployeeCompany = async (req, res) => {
 
   return res.json({
     company: {
-      _id: company._id,
       email: company.email,
       name: company.name,
       phone_number: company.phone_number,

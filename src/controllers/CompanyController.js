@@ -318,7 +318,7 @@ const createSchedule = async (req, res) => {
       });
     }
 
-    const charge = activeDays * 0.1;
+    let charge = activeDays * 0.1;
 
     const companyCollection = database.collection("users");
     const company = await companyCollection.findOne({ username });
@@ -365,13 +365,14 @@ const createSchedule = async (req, res) => {
 
     const transCollection = database.collection("transactions");
 
+    charge = parseFloat(charge.toFixed(2));
     let insertTrans = await transCollection.insertOne({
       username: username,
       type: "Create schedules",
       date: formateddate(),
       start_date: start_date,
       end_date: end_date,
-      charge: charge.toFixed(2),
+      charge: charge,
       number_of_schedules: activeDays,
       schedules: success_date,
     });
@@ -590,11 +591,12 @@ const deleteSchedule = async (req, res) => {
     );
 
     const transCollection = database.collection("transactions");
+
     const trans = await transCollection.insertOne({
       username: username,
       type: `Delete schedules`,
       date: formateddate(),
-      charge: charge.toFixed(2),
+      charge: charge,
       number_of_deleted_schedules: deletedSchedules.length,
       deleted_schedules: deletedSchedules,
     });
@@ -706,11 +708,12 @@ const upgradeCompanyPlanType = async (req, res) => {
     }
 
     const transCollection = database.collection("transactions");
+    cost = parseFloat(cost.toFixed(2));
     const trans = await transCollection.insertOne({
       username: username,
       type: `Upgrade plan type from ${req.body.user.plan_type} to ${plan_type}`,
       date: formateddate(),
-      charge: cost.toFixed(2),
+      charge: cost,
     });
 
     if (trans.modifiedCount === 0) {

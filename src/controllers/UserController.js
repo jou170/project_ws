@@ -347,6 +347,15 @@ const isCompanyExist = async (company) => {
 };
 
 const viewTransactionAdminSchema = Joi.object({
+  company: Joi.string().optional(),
+  start_date: Joi.date().format("YYYY-MM-DD").optional(),
+  end_date: Joi.date()
+    .format("YYYY-MM-DD")
+    .min(Joi.ref("start_date"))
+    .optional(),
+});
+
+const viewTransactionCompanySchema = Joi.object({
   start_date: Joi.date().format("YYYY-MM-DD").optional(),
   end_date: Joi.date()
     .format("YYYY-MM-DD")
@@ -357,6 +366,7 @@ const viewTransactionAdminSchema = Joi.object({
 const viewTransaction = async (req, res) => {
   const transCollection = client.db("proyek_ws").collection("transactions");
   const { company, start_date, end_date } = req.query;
+  const { user } = req.body;
 
   if (
     (start_date != null && end_date == null) ||
@@ -382,7 +392,18 @@ const viewTransaction = async (req, res) => {
   }
 
   try {
-    await viewTransactionAdminSchema.validateAsync({ start_date, end_date });
+    if (user.role == "company") {
+      await viewTransactionCompanySchema.validateAsync({
+        start_date,
+        end_date,
+      });
+    } else {
+      await viewTransactionAdminSchema.validateAsync({
+        company,
+        start_date,
+        end_date,
+      });
+    }
   } catch (error) {
     let errorS = error.toString().split(": ")[1];
     return res.status(400).json({ message: errorS });
@@ -407,10 +428,15 @@ const viewTransaction = async (req, res) => {
     (sum, item) => sum + parseFloat(item.charge),
     0
   );
-
+  trans = trans.map((c) => {
+    return {
+      ...c,
+      charge: `$${c.charge.toFixed(2)}`,
+    };
+  });
   return res.json({
     number_of_transaction: trans.length,
-    total_charge: `$${totalCharge}`,
+    total_charge: `$${totalCharge.toFixed(2)}`,
     transactions: trans,
   });
 };

@@ -80,7 +80,7 @@ router.delete(
 );
 
 router.get(
-  "/transaction",
+  "/transactions",
   validateAccessToken,
   allowRoles(["admin", "company"]),
   viewTransaction
@@ -94,7 +94,7 @@ router.get(
   getCompanies
 );
 router.get(
-  "/companies/:username",
+  "/companies/:username/data",
   validateAccessToken,
   allowRoles(["admin"]),
   getCompaniesByUsername
