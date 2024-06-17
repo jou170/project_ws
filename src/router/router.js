@@ -40,7 +40,7 @@ const {
   getEmployeeCompany,
   viewAttendance,
   employeeAttendance,
-  viewSchedule,
+  getPictureCompany,
 } = require("../controllers/EmployeeController.js");
 
 // General
@@ -95,7 +95,7 @@ router.get(
   getCompanies
 );
 router.get(
-  "/companies/:username/data",
+  "/companies/:username",
   validateAccessToken,
   allowRoles(["admin"]),
   getCompaniesByUsername
@@ -142,7 +142,7 @@ router.get(
 );
 
 router.get(
-  "/employees/:username",
+  "/employees/:username/data",
   validateAccessToken,
   allowRoles(["company"]),
   getEmployeesByUsername
@@ -187,10 +187,16 @@ router.post(
 );
 
 router.get(
-  "/company",
+  "/company/data",
   validateAccessToken,
   allowRoles(["employee"]),
   getEmployeeCompany
+);
+router.get(
+  "/company/picture",
+  validateAccessToken,
+  allowRoles(["employee"]),
+  getPictureCompany
 );
 
 router.get(
