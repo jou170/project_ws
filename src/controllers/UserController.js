@@ -54,7 +54,7 @@ const login = async (req, res) => {
       { username: user.username, email: user.email, role: user.role },
       process.env.JWT_SECRET,
       {
-        expiresIn: "1h",
+        expiresIn: "2h",
       }
     );
 
@@ -156,7 +156,7 @@ const register = async (req, res) => {
     });
 
     const token = jwt.sign({ username, email, role }, process.env.JWT_SECRET, {
-      expiresIn: "1h",
+      expiresIn: "2h",
     });
 
     let message = "";
@@ -269,7 +269,7 @@ const editUserProfileData = async (req, res) => {
 
 const viewUserProfilePicture = async (req, res) => {
   return res.status(200).sendFile(req.body.user.profile_picture, { root: "." });
-}
+};
 
 const editUserProfilePicture = async (req, res) => {
   let user = req.body.user;
@@ -300,10 +300,11 @@ const editUserProfilePicture = async (req, res) => {
 };
 
 const deleteUserProfilePicture = async (req, res) => {
-
   const filename = req.body.user.profile_picture;
   if (filename.includes("default")) {
-    return res.status(400).json({ message: "Profile picture has been deleted before" })
+    return res
+      .status(400)
+      .json({ message: "Profile picture has been deleted before" });
   }
   const filePath = "./" + filename;
 
@@ -322,7 +323,9 @@ const deleteUserProfilePicture = async (req, res) => {
         { $set: { profile_picture: "/uploads/default.png" } }
       );
 
-      return res.status(200).json({ message: "Delete Profile Picture Successfully" });
+      return res
+        .status(200)
+        .json({ message: "Delete Profile Picture Successfully" });
     } catch (error) {
       console.error(error);
       return res.status(500).send({ error: error.message });
@@ -335,34 +338,40 @@ const isCompanyExist = async (company) => {
   const collection = client.db("proyek_ws").collection("users");
 
   return await collection.findOne({
-    username: company
-  })
-
-}
+    username: company,
+  });
+};
 
 const viewTransactionAdminSchema = Joi.object({
   start_date: Joi.date().format("YYYY-MM-DD").optional(),
-  end_date: Joi.date().format("YYYY-MM-DD").min(Joi.ref("start_date")).optional(),
+  end_date: Joi.date()
+    .format("YYYY-MM-DD")
+    .min(Joi.ref("start_date"))
+    .optional(),
 });
 
 const viewTransaction = async (req, res) => {
-
   const transCollection = client.db("proyek_ws").collection("transactions");
   const { company, start_date, end_date } = req.query;
 
-  if ((start_date != null && end_date == null) || (start_date == null && end_date != null)) {
-    return res.status(400).json({ message: "Both start date and end date must be provided" })
+  if (
+    (start_date != null && end_date == null) ||
+    (start_date == null && end_date != null)
+  ) {
+    return res
+      .status(400)
+      .json({ message: "Both start date and end date must be provided" });
   }
 
   let where = {};
   if (req.body.user.role == "admin") {
     if (company != null) {
-      if (await isCompanyExist(company) == null) {
+      if ((await isCompanyExist(company)) == null) {
         return res.status(400).json({
-          message: "Company not found"
-        })
+          message: "Company not found",
+        });
       }
-      where.username = company
+      where.username = company;
     }
   } else {
     where.username = req.body.user.username;
@@ -372,13 +381,13 @@ const viewTransaction = async (req, res) => {
     await viewTransactionAdminSchema.validateAsync({ start_date, end_date });
   } catch (error) {
     let errorS = error.toString().split(": ")[1];
-    return res.status(400).json({ message: errorS })
+    return res.status(400).json({ message: errorS });
   }
 
   if (start_date && end_date) {
     where.date = {
       $gte: start_date + " 00:00",
-      $lte: end_date + " 23:59"
+      $lte: end_date + " 23:59",
     };
   }
 
@@ -387,17 +396,20 @@ const viewTransaction = async (req, res) => {
   let trans = await transCollection.find(where).project(project).toArray();
 
   if (trans.length == 0) {
-    return res.json({ message: "No transactions occurred" })
+    return res.json({ message: "No transactions occurred" });
   }
 
-  let totalCharge = trans.reduce((sum, item) => sum + parseFloat(item.charge), 0);
+  let totalCharge = trans.reduce(
+    (sum, item) => sum + parseFloat(item.charge),
+    0
+  );
 
   return res.json({
     number_of_transaction: trans.length,
     total_charge: `$${totalCharge}`,
-    transactions: trans
-  })
-}
+    transactions: trans,
+  });
+};
 
 module.exports = {
   login,
@@ -407,5 +419,5 @@ module.exports = {
   viewUserProfilePicture,
   editUserProfilePicture,
   deleteUserProfilePicture,
-  viewTransaction
+  viewTransaction,
 };

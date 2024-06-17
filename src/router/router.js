@@ -46,7 +46,7 @@ const {
 router.post("/login", login);
 router.post("/register", register);
 router.get(
-  "/profile",
+  "/profile/data",
   validateAccessToken,
   allowRoles(["employee", "company"]),
   viewUserProfile
