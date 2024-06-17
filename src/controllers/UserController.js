@@ -151,7 +151,7 @@ const register = async (req, res) => {
       role,
       phone_number,
       address,
-      profile_picture: "/uploads/default.png",
+      profile_picture: "/uploads/default/default.png",
       ...additionalProperties,
     });
 
@@ -278,6 +278,7 @@ const viewUserProfilePicture = async (req, res) => {
 
 const editUserProfilePicture = async (req, res) => {
   let user = req.body.user;
+
   const upload = uploadPhoto(user.username).single("profile_picture");
 
   upload(req, res, async function (err) {
@@ -286,6 +287,17 @@ const editUserProfilePicture = async (req, res) => {
     }
 
     try {
+      const filePath = "./" + user.profile_picture;
+
+      if (!filePath.includes("default/default")) {
+        fs.unlink(filePath, async (err) => {
+          if (err) {
+            console.error(err);
+            return res.status(500).send({ error: err });
+          }
+        });
+      }
+
       await client.connect();
       const database = client.db("proyek_ws");
       const collection = database.collection("users");
@@ -305,7 +317,7 @@ const editUserProfilePicture = async (req, res) => {
 
 const deleteUserProfilePicture = async (req, res) => {
   const filename = req.body.user.profile_picture;
-  if (filename.includes("default")) {
+  if (filename.includes("default/default")) {
     return res
       .status(400)
       .json({ message: "User doesn't have a profile picture" });
@@ -324,7 +336,7 @@ const deleteUserProfilePicture = async (req, res) => {
     try {
       await collection.updateOne(
         { username: req.body.user.username },
-        { $set: { profile_picture: "/uploads/default.png" } }
+        { $set: { profile_picture: "/uploads/default/default.png" } }
       );
 
       return res
