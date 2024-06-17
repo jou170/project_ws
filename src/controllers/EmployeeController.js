@@ -89,12 +89,11 @@ const getEmployeeCompany = async (req, res) => {
       name: company.name,
       phone_number: company.phone_number,
       address: company.address,
-      profile_picture: company.profile_picture,
     },
   });
 };
 
-const viewAttendance = async (req, res) => {};
+const viewAttendance = async (req, res) => { };
 
 const employeeAttendance = async (req, res) => {
   const username = req.body.user.username;
@@ -143,7 +142,19 @@ const employeeAttendance = async (req, res) => {
     await client.close();
   }
 };
-const getPictureCompany = async (req, res) => {};
+const getPictureCompany = async (req, res) => {
+  let company = req.body.user.company;
+
+  if (company == "") {
+    return res.status(400).json({
+      message: "You haven't joined any company"
+    })
+  }
+
+  await client.connect();
+  let company_picture = (await client.db("proyek_ws").collection("users").findOne({ username: company })).profile_picture;
+  return res.status(200).sendFile(company_picture, { root: "." });
+};
 
 module.exports = {
   joinCompany,
