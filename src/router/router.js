@@ -1,4 +1,10 @@
 const router = require("express").Router();
+
+const {
+  validateAccessToken,
+  allowRoles,
+} = require("../middleware/AuthMiddleware.js");
+
 const {
   login,
   register,
@@ -7,38 +13,42 @@ const {
   editUserProfilePicture,
   deleteUserProfilePicture,
   viewUserProfilePicture,
-  viewTransaction,
 } = require("../controllers/UserController.js");
 
 const {
   getCompanies,
   getCompaniesByUsername,
+} = require("../controllers/AdminController.js");
+
+const {
   getTopUpRequest,
   editTopUpRequest,
-} = require("../controllers/AdminController.js");
+  companyTopUp,
+} = require("../controllers/TopupController.js");
+
+const {
+  createSchedule,
+  getSchedule,
+  deleteSchedule,
+} = require("../controllers/ScheduleController.js");
+
+const {
+  viewTransaction,
+  viewTransactionDetail,
+} = require("../controllers/TransactionController.js");
 
 const {
   getEmployees,
   getEmployeesByUsername,
   removeEmployeesFromCompany,
-  createSchedule,
-  getSchedule,
-  deleteSchedule,
   upgradeCompanyPlanType,
   generateCompanyInvitationCode,
-  companyTopUp,
   viewEmployeePicture,
 } = require("../controllers/CompanyController.js");
 
 const {
-  validateAccessToken,
-  allowRoles,
-} = require("../middleware/AuthMiddleware.js");
-
-const {
   joinCompany,
   getEmployeeCompany,
-  viewAttendance,
   employeeAttendance,
   getPictureCompany,
 } = require("../controllers/EmployeeController.js");
@@ -86,6 +96,14 @@ router.get(
   allowRoles(["admin", "company"]),
   viewTransaction
 );
+
+router.get(
+  "/transactions/:transaction_id",
+  validateAccessToken,
+  allowRoles(["admin", "company"]),
+  viewTransactionDetail
+);
+
 // Admin
 
 router.get(
@@ -137,14 +155,14 @@ router.delete(
 router.get(
   "/employees/:username/picture",
   validateAccessToken,
-  allowRoles(["company"]),
+  allowRoles(["admin", "company"]),
   viewEmployeePicture
 );
 
 router.get(
   "/employees/:username/data",
   validateAccessToken,
-  allowRoles(["company"]),
+  allowRoles(["admin", "company"]),
   getEmployeesByUsername
 );
 router.put(
@@ -197,13 +215,6 @@ router.get(
   validateAccessToken,
   allowRoles(["employee"]),
   getPictureCompany
-);
-
-router.get(
-  "/attendance",
-  validateAccessToken,
-  allowRoles(["employee"]),
-  viewAttendance
 );
 
 router.put(

@@ -93,8 +93,6 @@ const getEmployeeCompany = async (req, res) => {
   });
 };
 
-const viewAttendance = async (req, res) => { };
-
 const employeeAttendance = async (req, res) => {
   const username = req.body.user.username;
   const currentDate = moment().format("YYYY-MM-DD");
@@ -147,19 +145,23 @@ const getPictureCompany = async (req, res) => {
 
   if (company == "") {
     return res.status(400).json({
-      message: "You haven't joined any company"
-    })
+      message: "You haven't joined any company",
+    });
   }
 
   await client.connect();
-  let company_picture = (await client.db("proyek_ws").collection("users").findOne({ username: company })).profile_picture;
+  let company_picture = (
+    await client
+      .db("proyek_ws")
+      .collection("users")
+      .findOne({ username: company })
+  ).profile_picture;
   return res.status(200).sendFile(company_picture, { root: "." });
 };
 
 module.exports = {
   joinCompany,
   getEmployeeCompany,
-  viewAttendance,
   employeeAttendance,
   getPictureCompany,
 };
