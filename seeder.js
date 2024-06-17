@@ -172,7 +172,7 @@ async function createTopUp(client) {
     }
   }
 
-  let random = Math.floor(Math.random() * 5) + 1;
+  let random = Math.floor(Math.random() * 4) + 1;
   let randomAmount = Math.floor(Math.random() * (100 - 50 + 1)) + 50;
   let currentDate = new Date();
   let datetime = `${currentDate.getFullYear()}-${padNumber(
@@ -193,7 +193,7 @@ async function createTopUp(client) {
       created: datetime,
     };
     await database.collection("topups").insertOne(topup);
-  } else if (random === 2 || random == 3 || random == 4) {
+  } else if (random === 2 || random == 3) {
     topup = {
       _id: new ObjectId(),
       topup_id: topup_id,
@@ -230,7 +230,7 @@ async function createTopUp(client) {
         charge: 30,
       });
     }
-  } else if (random === 5) {
+  } else if (random === 4) {
     topup = {
       _id: new ObjectId(),
       topup_id: topup_id,
