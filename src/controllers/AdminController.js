@@ -3,18 +3,76 @@ const jwt = require("jsonwebtoken");
 const client = require("../database/database");
 require("dotenv").config();
 
+const getCompaniesSchema = Joi.object({
+  plan_type: Joi.string().valid("free", "standard", "premium").optional(),
+  limit: Joi.number()
+    .integer()
+    .min(1)
+    .optional()
+    .default(10)
+    .when("offset", { is: Joi.exist(), then: Joi.required() }),
+  offset: Joi.number().integer().min(1).optional(),
+});
 const getCompanies = async (req, res) => {
+  const { offset, plan_type } = req.query;
+  let { limit } = req.query;
+  let companies;
+
+  const { error } = getCompaniesSchema.validate({ plan_type, limit, offset });
+
+  if (error) {
+    const errorMessage = error.details
+      .map((detail) => detail.message.replace(/"/g, ""))
+      .join("; ");
+    return res.status(400).json({ message: errorMessage });
+  }
+
   try {
     await client.connect();
     const database = client.db("proyek_ws");
 
-    const companies = await database
-      .collection("users")
-      .find(
-        { role: "company" },
-        { projection: { username: 1, name: 1, plan_type: 1, employees: 1 } }
-      )
-      .toArray();
+    if (plan_type == "free") {
+      companies = await database
+        .collection("users")
+        .find(
+          { role: "company", plan_type: "free" },
+          { projection: { username: 1, name: 1, plan_type: 1, employees: 1 } }
+        )
+        .toArray();
+    } else if (plan_type == "standard") {
+      companies = await database
+        .collection("users")
+        .find(
+          { role: "company", plan_type: "standard" },
+          { projection: { username: 1, name: 1, plan_type: 1, employees: 1 } }
+        )
+        .toArray();
+    } else if (plan_type == "premium") {
+      companies = await database
+        .collection("users")
+        .find(
+          { role: "company", plan_type: "premium" },
+          { projection: { username: 1, name: 1, plan_type: 1, employees: 1 } }
+        )
+        .toArray();
+    } else {
+      companies = await database
+        .collection("users")
+        .find(
+          { role: "company" },
+          { projection: { username: 1, name: 1, plan_type: 1, employees: 1 } }
+        )
+        .toArray();
+    }
+
+    if (limit && offset) {
+      companies = companies.slice(limit * (offset - 1), limit * offset);
+    } else if (limit) {
+      companies = companies.slice(0, limit);
+    } else if (!limit) {
+      limit = 10;
+      companies = companies.slice(0, limit);
+    }
 
     const companyPromises = companies.map(async (company) => {
       const transactions = await database
@@ -36,7 +94,7 @@ const getCompanies = async (req, res) => {
       };
     });
 
-    const result = {
+    result = {
       companies: await Promise.all(companyPromises),
     };
 
@@ -54,27 +112,44 @@ const getCompaniesByUsername = async (req, res) => {
   try {
     await client.connect();
     const database = client.db("proyek_ws");
-    const collection = await database
-      .collection("users")
-      .find(
-        { username: username },
-        { role: "company" },
-        { projection: { username: 1, name: 1, plan_type: 1, employees: 1 } }
-      )
-      .toArray();
 
-    if (collection.length == 0) {
+    const company = await database
+      .collection("users")
+      .findOne(
+        { username: username, role: "company" },
+        { projection: { username: 1, name: 1, plan_type: 1, employees: 1 } }
+      );
+
+    if (!company) {
       return res.status(404).send({ message: "Company Not Found" });
     }
 
+    const transactions = await database
+      .collection("transactions")
+      .find(
+        { username: username },
+        {
+          projection: {
+            _id: 0,
+            type: 1,
+            date: 1,
+            charge: 1,
+            start_date: 1,
+            end_date: 1,
+            number_of_schedules: 1,
+          },
+        }
+      )
+      .toArray();
+
     const result = {
-      company: collection.map((company) => ({
-        username: company.username,
+      company: {
         name: company.name,
-        plan_type: company.plan_type,
+        username: company.username,
         total_employee: company.employees.length,
-        total_spent: 0,
-      })),
+        employees: company.employees,
+        transactions: transactions,
+      },
     };
 
     return res.status(200).json(result);
@@ -111,9 +186,6 @@ const getTopUpRequest = async (req, res) => {
     let { limit } = req.query;
     const { user } = req.body;
     const { error } = topupSchema.validate({ status, limit, offset, date });
-    if (!limit) {
-      limit = 10;
-    }
     if (error) {
       const errorMessage = error.details
         .map((detail) => detail.message.replace(/"/g, ""))
@@ -235,6 +307,9 @@ const getTopUpRequest = async (req, res) => {
     if (limit && offset) {
       collection = collection.slice(limit * (offset - 1), limit * offset);
     } else if (limit) {
+      collection = collection.slice(0, limit);
+    } else if (!limit) {
+      limit = 10;
       collection = collection.slice(0, limit);
     }
 

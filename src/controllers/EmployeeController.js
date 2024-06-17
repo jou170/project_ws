@@ -143,13 +143,12 @@ const employeeAttendance = async (req, res) => {
     await client.close();
   }
 };
-
-const viewSchedule = async (req, res) => {};
+const getPictureCompany = async (req, res) => {};
 
 module.exports = {
   joinCompany,
   getEmployeeCompany,
   viewAttendance,
   employeeAttendance,
-  viewSchedule,
+  getPictureCompany,
 };
