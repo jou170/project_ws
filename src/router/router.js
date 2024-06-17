@@ -27,6 +27,7 @@ const {
   upgradeCompanyPlanType,
   generateCompanyInvitationCode,
   companyTopUp,
+  viewEmployeePicture,
 } = require("../controllers/CompanyController.js");
 
 const {
@@ -132,6 +133,14 @@ router.delete(
   allowRoles(["company"]),
   deleteSchedule
 );
+
+router.get(
+  "/employees/:username/picture",
+  validateAccessToken,
+  allowRoles(["company"]),
+  viewEmployeePicture
+);
+
 router.get(
   "/employees/:username",
   validateAccessToken,

@@ -17,6 +17,28 @@ function formateddate() {
   return `${year}-${month}-${day} ${hours}:${minutes}`;
 }
 
+const viewEmployeePicture = async (req, res) => {
+  const { username } = req.params;
+
+  await client.connect();
+  const collection = client.db("proyek_ws").collection("users");
+
+  let employee = await collection.findOne({ username, role: "employee" });
+  if (!employee) {
+    return res.status(404).json({
+      message: "Employee not found"
+    })
+  }
+
+  if (employee.company != req.body.user.username) {
+    return res.status(403).json({
+      message: "This employee is not associated with this company"
+    })
+  }
+
+  return res.status(200).sendFile(employee.profile_picture, { root: "." });
+};
+
 const getEmployeesSchema = Joi.object({
   name: Joi.string().optional(),
   limit: Joi.number()
@@ -29,7 +51,8 @@ const getEmployeesSchema = Joi.object({
 });
 
 const getEmployees = async (req, res) => {
-  const { name, limit, offset } = req.query;
+  const { name, offset } = req.query;
+  let { limit } = req.query;
   const { user } = req.body;
   if (!limit) {
     limit = 10;
@@ -910,6 +933,7 @@ async function generateTopupId() {
   }
 }
 module.exports = {
+  viewEmployeePicture,
   getEmployees,
   getEmployeesByUsername,
   removeEmployeesFromCompany,
