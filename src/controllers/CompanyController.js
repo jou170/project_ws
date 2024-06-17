@@ -31,8 +31,10 @@ const getEmployeesSchema = Joi.object({
 const getEmployees = async (req, res) => {
   const { name, limit, offset } = req.query;
   const { user } = req.body;
-
-  const { error, value } = getEmployeesSchema.validate({ name, limit, offset });
+  if (!limit) {
+    limit = 10;
+  }
+  const { error } = getEmployeesSchema.validate({ name, limit, offset });
 
   if (error) {
     const errorMessage = error.details
@@ -55,31 +57,19 @@ const getEmployees = async (req, res) => {
 
     const employeeUsernames = mainUser.employees;
 
-    if (name) {
-      const nameQuery = req.query.name || "";
-      const nameRegex = new RegExp(nameQuery, "i");
+    const nameQuery = req.query.name || "";
+    const nameRegex = new RegExp(nameQuery, "i");
 
-      employeeDetails = await database
-        .collection("users")
-        .find(
-          {
-            username: { $in: employeeUsernames },
-            name: { $regex: nameRegex },
-          },
-          { projection: { username: 1, email: 1, name: 1, _id: 0 } }
-        )
-        .toArray();
-    } else {
-      employeeDetails = await database
-        .collection("users")
-        .find(
-          { username: employeeUsernames },
-          {
-            projection: { username: 1, email: 1, name: 1, _id: 0 },
-          }
-        )
-        .toArray();
-    }
+    employeeDetails = await database
+      .collection("users")
+      .find(
+        {
+          username: { $in: employeeUsernames },
+          name: { $regex: nameRegex },
+        },
+        { projection: { username: 1, email: 1, name: 1, _id: 0 } }
+      )
+      .toArray();
 
     if (limit && offset) {
       employeeDetails = employeeDetails.slice(
@@ -92,8 +82,9 @@ const getEmployees = async (req, res) => {
 
     const totalEmployees = mainUser.employees.length;
     const response = {
-      total_employee: totalEmployees,
-      employees: employeeDetails,
+      total_employees: totalEmployees,
+      total_employees_filtered: employeeDetails.length,
+      employees_filtered: employeeDetails,
     };
 
     return res.status(200).send(response);
@@ -153,24 +144,12 @@ const getEmployeesByUsername = async (req, res) => {
           username: 1,
           name: 1,
           email: 1,
-          profile_picture: 1,
           phone_number: 1,
           address: 1,
         },
       }
     );
-    const response = {
-      employee: {
-        username: employeeDetail.username,
-        name: employeeDetail.name,
-        email: employeeDetail.email,
-        profile_picture: employeeDetail.profile_picture,
-        phone_number: employeeDetail.phone_number,
-        address: employeeDetail.address,
-        absence: "",
-      },
-    };
-    return res.status(200).send(response);
+    return res.status(200).send(employeeDetail);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -222,9 +201,13 @@ const removeEmployeesFromCompany = async (req, res) => {
       }
     );
 
+    await database
+      .collection("users")
+      .updateOne({ username: username }, { $set: { company: "" } });
+
     if (result) {
       return res.status(200).send({
-        message: `Successfully delete ${username} from ${user.username}`,
+        message: `Successfully remove employee ${username} from company ${user.username}`,
       });
     }
   } catch (error) {
@@ -390,11 +373,11 @@ const createSchedule = async (req, res) => {
       end_date: end_date,
       charge: charge.toFixed(2),
       number_of_schedules: activeDays,
-      schedules: success_date
-    })
+      schedules: success_date,
+    });
 
     if (insertTrans.modifiedCount === 0) {
-      return res.status(500).json({ message: "Failed to save transaction" })
+      return res.status(500).json({ message: "Failed to save transaction" });
     }
 
     return res.status(201).json({
@@ -460,7 +443,13 @@ const getSchedule = async (req, res) => {
     const scheduleCollection = database.collection("schedules");
     const userCollection = database.collection("users");
 
-    // Calculate the start and end date for the query
+    const employee = await userCollection.findOne({ username });
+    if (!employee || !employee.company) {
+      return res
+        .status(400)
+        .json({ message: "You are not associated with any company" });
+    }
+
     let startDate, endDate;
     if (day) {
       startDate = moment({ year, month: month - 1, day })
@@ -480,19 +469,18 @@ const getSchedule = async (req, res) => {
 
     let schedules = [];
 
-
     // Fetch schedules for the specified date range
 
     schedules = await scheduleCollection
       .find({
         username,
         date: { $gte: startDate, $lte: endDate },
-      }).project({
+      })
+      .project({
         _id: 0,
-        username: 0
+        username: 0,
       })
       .toArray();
-
 
     // Apply pagination if limit and offset are provided
     if (limit && offset) {
@@ -531,7 +519,6 @@ const getSchedule = async (req, res) => {
     }
 
     return res.status(200).json({ schedules });
-
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -610,10 +597,12 @@ const deleteSchedule = async (req, res) => {
       charge: charge.toFixed(2),
       number_of_deleted_schedules: deletedSchedules.length,
       deleted_schedules: deletedSchedules,
-    })
+    });
 
     if (trans.modifiedCount === 0) {
-      return res.status(500).json({ message: "Failed to save the transactions" });
+      return res
+        .status(500)
+        .json({ message: "Failed to save the transactions" });
     }
 
     return res.status(200).json({
@@ -721,17 +710,18 @@ const upgradeCompanyPlanType = async (req, res) => {
       username: username,
       type: `Upgrade plan type from ${req.body.user.plan_type} to ${plan_type}`,
       date: formateddate(),
-      charge: cost.toFixed(2)
-    })
+      charge: cost.toFixed(2),
+    });
 
     if (trans.modifiedCount === 0) {
-      return res.status(500).json({ message: "Failed to save the transaction" });
+      return res
+        .status(500)
+        .json({ message: "Failed to save the transaction" });
     }
 
     return res
       .status(200)
       .json({ message: `Successful upgrade plan type to ${plan_type}` });
-
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -761,7 +751,7 @@ const generateInvitationCode = async (collection) => {
 };
 
 const invitationLimitSchema = Joi.object({
-  invitation_limit: Joi.number().integer().required(),
+  invitation_limit: Joi.number().integer().min(1).required(),
 });
 
 const generateCompanyInvitationCode = async (req, res) => {
@@ -881,14 +871,13 @@ const companyTopUp = async (req, res) => {
       created: datetime,
     });
 
-    return res.status(200).send({
+    return res.status(201).send({
       topup_id: topup_id,
       amount: "$" + amount,
       status: "pending",
       time: datetime,
     });
   } catch (error) {
-    console.error("Error fetching user data:", error);
     res.status(500).send({ message: "Internal server error" });
   } finally {
     await client.close();

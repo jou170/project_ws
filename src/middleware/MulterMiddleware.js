@@ -41,7 +41,10 @@ const uploadPhoto = (username) => {
       if (checkExtName && checkMimeType) {
         callback(null, true);
       } else {
-        callback(new Error("tipe data salah"), false);
+        callback(
+          new Error("profile_picture extension must be .jpg, .jpeg, .png"),
+          false
+        );
       }
     },
   });

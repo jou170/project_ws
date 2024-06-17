@@ -138,8 +138,8 @@ router.get(
   allowRoles(["company"]),
   getEmployeesByUsername
 );
-router.delete(
-  "/employees",
+router.put(
+  "/employees/:username",
   validateAccessToken,
   allowRoles(["company"]),
   removeEmployeesFromCompany
@@ -156,13 +156,13 @@ router.post(
   allowRoles(["company"]),
   companyTopUp
 );
-router.post(
+router.put(
   "/upgrade",
   validateAccessToken,
   allowRoles(["company"]),
   upgradeCompanyPlanType
 );
-router.post(
+router.put(
   "/invitation_code",
   validateAccessToken,
   allowRoles(["company"]),

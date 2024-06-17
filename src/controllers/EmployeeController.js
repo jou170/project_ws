@@ -20,28 +20,12 @@ const joinCompany = async (req, res) => {
 
   if (!invitation_code || invitation_code == "") {
     return res.status(400).json({
-      message: "Invitation code must be provided",
+      message: "invitation_code must be provided",
     });
   }
 
   const collection = client.db("proyek_ws").collection("users");
   let company = await collection.findOne({ invitation_code });
-
-  if (!company) {
-    return res.status(400).json({
-      message: "Invalid invitation code",
-    });
-  }
-
-  if (
-    company.invitation_limit == 0 ||
-    !cekLimit(company.plan_type, company.employees.length)
-  ) {
-    return res.status(400).json({
-      message: "Invalid invitation code",
-    });
-  }
-
   if (user.company != "") {
     if (user.company == company.username) {
       return res.status(400).json({
@@ -52,6 +36,21 @@ const joinCompany = async (req, res) => {
         message: "You have joined on a company",
       });
     }
+  }
+
+  if (!company) {
+    return res.status(400).json({
+      message: "Invalid invitation_code",
+    });
+  }
+
+  if (
+    company.invitation_limit == 0 ||
+    !cekLimit(company.plan_type, company.employees.length)
+  ) {
+    return res.status(400).json({
+      message: "Invalid invitation_code",
+    });
   }
 
   // update user
@@ -82,7 +81,7 @@ const getEmployeeCompany = async (req, res) => {
 
   if (req.body.user.company == "") {
     return res.status(400).json({
-      message: "You haven't joined any company",
+      message: "You are not associated with any company",
     });
   }
 
@@ -114,7 +113,7 @@ const employeeAttendance = async (req, res) => {
     if (!employee || !employee.company) {
       return res
         .status(400)
-        .json({ message: "You are not associated with any company." });
+        .json({ message: "You are not associated with any company" });
     }
 
     const companyUsername = employee.company;

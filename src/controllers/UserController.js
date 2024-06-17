@@ -178,10 +178,15 @@ const register = async (req, res) => {
 const viewUserProfile = async (req, res) => {
   try {
     const user = req.body.user;
-
+    if (user.role == "company") {
+      user.balance = `$${user.balance}`;
+    }
     delete user._id;
     delete user.password;
     delete user.role;
+    delete user.profile_picture;
+    delete user.company;
+    delete user.employees;
     return res.status(200).json(user);
   } catch (error) {
     console.error(error);
@@ -191,7 +196,7 @@ const viewUserProfile = async (req, res) => {
 
 const editUserProfileSchema = Joi.object({
   name: Joi.string().optional(),
-  phone_number: Joi.string().pattern(/^\d+$/).optional().messages({
+  phone_number: Joi.string().pattern(/^\d+$/).min(12).optional().messages({
     "string.pattern.base": "phone_number must contain only digits",
   }),
   address: Joi.string().optional(),
@@ -289,10 +294,9 @@ const editUserProfilePicture = async (req, res) => {
         { username: user.username },
         { $set: { profile_picture: `/uploads/${req.file.filename}` } }
       );
-      return res.json({ message: "Update profile picture successfully." });
+      return res.json({ message: "Update profile picture successfully" });
     } catch (error) {
       return res.status(500).json({
-        success: false,
         message: `Error : ${err}`,
       });
     }
@@ -304,7 +308,7 @@ const deleteUserProfilePicture = async (req, res) => {
   if (filename.includes("default")) {
     return res
       .status(400)
-      .json({ message: "Profile picture has been deleted before" });
+      .json({ message: "User doesn't have a profile picture" });
   }
   const filePath = "./" + filename;
 
@@ -325,7 +329,7 @@ const deleteUserProfilePicture = async (req, res) => {
 
       return res
         .status(200)
-        .json({ message: "Delete Profile Picture Successfully" });
+        .json({ message: "Delete profile picture successfully" });
     } catch (error) {
       console.error(error);
       return res.status(500).send({ error: error.message });

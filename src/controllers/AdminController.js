@@ -76,8 +76,8 @@ const topupSchema = Joi.object({
   limit: Joi.number()
     .integer()
     .min(1)
-    .optional()
     .default(10)
+    .optional()
     .when("offset", { is: Joi.exist(), then: Joi.required() }),
   offset: Joi.number().integer().min(1).optional(),
   date: Joi.string()
@@ -92,9 +92,13 @@ const editTopupSchema = Joi.object({
 
 const getTopUpRequest = async (req, res) => {
   try {
-    const { status, limit, offset, date } = req.query;
+    const { status, offset, date } = req.query;
+    let { limit } = req.query;
     const { user } = req.body;
     const { error } = topupSchema.validate({ status, limit, offset, date });
+    if (!limit) {
+      limit = 10;
+    }
     if (error) {
       const errorMessage = error.details
         .map((detail) => detail.message.replace(/"/g, ""))
@@ -204,6 +208,12 @@ const getTopUpRequest = async (req, res) => {
         ])
         .toArray();
     }
+    collection = collection.map((c) => {
+      return {
+        ...c,
+        amount: `$${c.amount}`,
+      };
+    });
     if (status) {
       collection = collection.filter((item) => item.status === status);
     }
