@@ -1,10 +1,13 @@
 const { faker } = require("@faker-js/faker");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
+const { MongoClient, ObjectId } = require("mongodb");
 
 faker.seed(42);
 
 let usedEmployees = [];
+let usedCompany = [];
+let topup_id = 0;
 
 async function createEmployeeData() {
   const sex = faker.person.sexType();
@@ -19,6 +22,7 @@ async function createEmployeeData() {
   const hashedPassword = await bcrypt.hash("12345678", salt);
 
   return {
+    _id: new ObjectId(),
     username: username,
     email: email,
     name: name,
@@ -42,6 +46,7 @@ async function createAdminData() {
   const hashedPassword = await bcrypt.hash("12345678", salt);
 
   return {
+    _id: new ObjectId(),
     username: username,
     email: email,
     name: name,
@@ -64,6 +69,7 @@ async function createCompaniesData() {
   const invitationCode = await generateInvitationCode(collection);
 
   return {
+    _id: new ObjectId(),
     username: username,
     email: email,
     name: name,
@@ -97,10 +103,21 @@ async function createCompaniesWithEmployeeData(client) {
   let employee;
 
   while (!isUnique) {
-    employee = await collection.findOne({
+    const totalEmployees = await collection.countDocuments({
       role: "employee",
       company: "",
     });
+
+    const randomIndex = Math.floor(Math.random() * totalEmployees);
+
+    employee = await collection
+      .aggregate([
+        { $match: { role: "employee", company: "" } },
+        { $skip: randomIndex },
+        { $limit: 1 },
+      ])
+      .next();
+
     if (employee && !usedEmployees.includes(employee.username)) {
       isUnique = true;
     }
@@ -108,6 +125,7 @@ async function createCompaniesWithEmployeeData(client) {
   const invitationCode = await generateInvitationCode(collection);
 
   const companyData = {
+    _id: new ObjectId(),
     username: username,
     email: email,
     name: name,
@@ -131,6 +149,86 @@ async function createCompaniesWithEmployeeData(client) {
 
   usedEmployees.push(employee.username);
   return companyData;
+}
+
+async function createTopUp(client) {
+  const database = client.db("coba");
+  const collection = database.collection("users");
+
+  const companies = await collection.find({ role: "company" }).toArray();
+  const availableCompanies = companies.filter(
+    (company) => !usedCompany.includes(company.username)
+  );
+
+  let unique = false;
+  while (!unique) {
+    randomIndex = Math.floor(Math.random() * availableCompanies.length);
+    company = availableCompanies[randomIndex];
+
+    if (!usedCompany.includes(company.username)) {
+      unique = true;
+      usedCompany.push(company.username);
+    }
+  }
+
+  let random = Math.floor(Math.random() * 3) + 1;
+  let randomAmount = Math.floor(Math.random() * (500 - 10 + 1)) + 10;
+  let currentDate = new Date();
+  let datetime = `${currentDate.getFullYear()}-${padNumber(
+    currentDate.getMonth() + 1
+  )}-${padNumber(currentDate.getDate())} ${padNumber(
+    currentDate.getHours()
+  )}:${padNumber(currentDate.getMinutes())}`;
+  topup_id++;
+  let topup;
+
+  if (random === 1) {
+    topup = {
+      _id: new ObjectId(),
+      topup_id: topup_id,
+      username: company.username,
+      amount: randomAmount.toString(),
+      status: "pending",
+      created: datetime,
+    };
+    await database.collection("topups").insertOne(topup);
+  } else if (random === 2) {
+    topup = {
+      _id: new ObjectId(),
+      topup_id: topup_id,
+      username: company.username,
+      amount: randomAmount.toString(),
+      status: "approved",
+      created: datetime,
+    };
+    await database.collection("topups").insertOne(topup);
+    let oldBalance = parseFloat(company.balance);
+    let balanceToAdd = parseFloat(randomAmount);
+    let newBalance = oldBalance + balanceToAdd;
+    newBalance = parseFloat(newBalance.toFixed(2));
+    await database
+      .collection("users")
+      .updateOne(
+        { username: company.username },
+        { $set: { balance: newBalance } }
+      );
+  } else if (random === 3) {
+    topup = {
+      _id: new ObjectId(),
+      topup_id: topup_id,
+      username: company.username,
+      amount: randomAmount.toString(),
+      status: "rejected",
+      created: datetime,
+    };
+    await database.collection("topups").insertOne(topup);
+  }
+
+  return topup;
+}
+
+function padNumber(number) {
+  return number.toString().padStart(2, "0");
 }
 
 const generateInvitationCode = async (collection) => {
@@ -185,7 +283,14 @@ function createCompaniesWithEmployeeDatas(n, client) {
   return users;
 }
 
-const { MongoClient } = require("mongodb");
+function createTopUpDatas(n, client) {
+  const topups = [];
+  for (let i = 0; i < n; i++) {
+    topups.push(createTopUp(client));
+  }
+  return topups;
+}
+
 const url = "mongodb://localhost:27017";
 const client = new MongoClient(url, { family: 4 });
 const dbName = "coba";
@@ -194,22 +299,25 @@ const main = async () => {
   try {
     await client.connect();
     const database = client.db(dbName);
+    await database.dropDatabase();
 
     const employeePromises = createEmployeeDatas(10);
-    const adminPromises = createAdminDatas(2);
-    const companyPromises = createCompaniesDatas(2);
-    const companyEmpPromises = createCompaniesWithEmployeeDatas(3, client);
-
     const employees = await Promise.all(employeePromises);
-    const admins = await Promise.all(adminPromises);
-    const companies = await Promise.all(companyPromises);
-    const companiesEmp = await Promise.all(companyEmpPromises);
-
-    await database.dropDatabase();
     await database.collection("users").insertMany(employees);
+
+    const adminPromises = createAdminDatas(2);
+    const admins = await Promise.all(adminPromises);
     await database.collection("users").insertMany(admins);
+
+    const companyPromises = createCompaniesDatas(4);
+    const companies = await Promise.all(companyPromises);
     await database.collection("users").insertMany(companies);
-    await database.collection("users").insertMany(companiesEmp);
+
+    const companyEmpPromises = createCompaniesWithEmployeeDatas(4, client);
+    await Promise.all(companyEmpPromises);
+
+    const topUpPromises = createTopUpDatas(5, client);
+    await Promise.all(topUpPromises);
 
     console.log("OK");
   } catch (error) {
