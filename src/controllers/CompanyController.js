@@ -432,7 +432,14 @@ const getScheduleSchema = Joi.object({
 
 const getSchedule = async (req, res) => {
   const { day, month, year, limit, offset } = req.query;
-  const username = req.body.user.username;
+
+  let user = req.body.user;
+  let username;
+  if (user.role == "company") {
+    username = user.username;
+  } else {
+    username = user.company;
+  }
 
   const { error } = getScheduleSchema.validate({
     day,
@@ -471,13 +478,21 @@ const getSchedule = async (req, res) => {
         .format("YYYY-MM-DD");
     }
 
+    let schedules = [];
+
+
     // Fetch schedules for the specified date range
-    let schedules = await scheduleCollection
+
+    schedules = await scheduleCollection
       .find({
         username,
         date: { $gte: startDate, $lte: endDate },
+      }).project({
+        _id: 0,
+        username: 0
       })
       .toArray();
+
 
     // Apply pagination if limit and offset are provided
     if (limit && offset) {
@@ -485,6 +500,7 @@ const getSchedule = async (req, res) => {
     } else if (limit) {
       schedules = schedules.slice(0, limit);
     }
+
     const company = await userCollection.findOne({ username });
     const employeeUsernames = company.employees || [];
 
@@ -492,19 +508,30 @@ const getSchedule = async (req, res) => {
       .find({ username: { $in: employeeUsernames } })
       .toArray();
 
-    schedules = schedules.map((schedule) => {
-      const attendanceSet = new Set(schedule.attendance);
-      return {
-        ...schedule,
-        attendance: employeeDetails.map((employee) => ({
-          username: employee.username,
-          name: employee.name,
-          attend: attendanceSet.has(employee.username),
-        })),
-      };
-    });
+    if (user.roles == "company") {
+      schedules = schedules.map((schedule) => {
+        const attendanceSet = new Set(schedule.attendance);
+        return {
+          ...schedule,
+          attendance: employeeDetails.map((employee) => ({
+            username: employee.username,
+            name: employee.name,
+            attend: attendanceSet.has(employee.username),
+          })),
+        };
+      });
+    } else {
+      schedules = schedules.map((schedule) => {
+        const attendanceSet = new Set(schedule.attendance);
+        return {
+          ...schedule,
+          attendance: attendanceSet.has(user.username),
+        };
+      });
+    }
 
     return res.status(200).json({ schedules });
+
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: "Internal Server Error" });
