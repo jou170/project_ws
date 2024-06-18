@@ -8,10 +8,9 @@ const moment = require("moment");
 
 faker.seed(42);
 
-// const uri = process.env.MONGODB_URI;
-const uri = "mongodb://localhost:27017/";
+const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri, { family: 4 });
-const dbName = "coba";
+const dbName = "proyek_ws";
 
 let usedCompany = [];
 let topup_id = 0;
