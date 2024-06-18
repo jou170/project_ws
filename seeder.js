@@ -8,7 +8,8 @@ const moment = require("moment");
 
 faker.seed(42);
 
-const uri = process.env.MONGODB_URI;
+// const uri = process.env.MONGODB_URI;
+const uri = "mongodb://localhost:27017/";
 const client = new MongoClient(uri, { family: 4 });
 const dbName = "coba";
 
@@ -17,30 +18,49 @@ let usedCompany = [];
 let topup_id = 0;
 let transaction_id = 0;
 
-async function createEmployeeData() {
-  const sex = faker.person.sexType();
-  const firstName = faker.person.firstName(sex);
-  const lastName = faker.person.lastName(sex);
-  const name = `${firstName} ${lastName}`;
-  const email = `${firstName.toLowerCase()}@gmail.com`;
-  const username = `${firstName.toLowerCase()}`;
-  const phone_number = faker.helpers.fromRegExp(/0[38]{1}1[0-9]{9}/);
-  const address = faker.location.streetAddress({ useFullAddress: true });
-  const salt = await bcrypt.genSalt(10);
-  const hashedPassword = await bcrypt.hash("12345678", salt);
+const database = client.db(dbName);
+const usersCollection = database.collection("users");
 
-  return {
-    _id: new ObjectId(),
-    username: username,
-    email: email,
-    name: name,
-    password: hashedPassword,
-    role: "employee",
-    phone_number: phone_number,
-    address: address,
-    profile_picture: "/uploads/default.jpg",
-    company: "",
-  };
+async function createEmployeeData(company = "") {
+  let username, email;
+  let isUnique = false;
+
+  while (!isUnique) {
+    const sex = faker.person.sexType();
+    const firstName = faker.person.firstName(sex);
+    const lastName = faker.person.lastName(sex);
+    const name = `${firstName} ${lastName}`;
+    email = `${firstName.toLowerCase()}@gmail.com`;
+    username = `${firstName.toLowerCase()}`;
+    const phone_number = faker.helpers.fromRegExp(/0[38]{1}1[0-9]{9}/);
+    const address = faker.location.streetAddress({ useFullAddress: true });
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash("12345678", salt);
+
+    const existingUser = await usersCollection.findOne({
+      $or: [{ username: username }, { email: email }],
+    });
+
+    if (!existingUser) {
+      isUnique = true;
+
+      const newEmployee = {
+        _id: new ObjectId(),
+        username: username,
+        email: email,
+        name: name,
+        password: hashedPassword,
+        role: "employee",
+        phone_number: phone_number,
+        address: address,
+        profile_picture: "/uploads/default.jpg",
+        company: company,
+      };
+      await usersCollection.insertOne(newEmployee);
+
+      return username;
+    }
+  }
 }
 
 async function createAdminData() {
@@ -64,99 +84,118 @@ async function createAdminData() {
 }
 
 async function createCompaniesData() {
-  const name = faker.company.name();
-  const splitName = name.split(/[\s\W]+/);
-  const email = `${splitName[0].toLowerCase()}@gmail.com`;
-  const username = `${splitName[0].toLowerCase()}`;
-  const phone_number = faker.helpers.fromRegExp(/0[38]{1}1[0-9]{9}/);
-  const address = faker.location.streetAddress({ useFullAddress: true });
-  const salt = await bcrypt.genSalt(10);
-  const hashedPassword = await bcrypt.hash("12345678", salt);
-  const database = client.db(dbName);
-  const collection = database.collection("users");
-  const invitationCode = await generateInvitationCode(collection);
-
-  return {
-    _id: new ObjectId(),
-    username: username,
-    email: email,
-    name: name,
-    password: hashedPassword,
-    role: "company",
-    phone_number: phone_number,
-    address: address,
-    profile_picture: "/uploads/default.jpg",
-    balance: 0,
-    plan_type: "free",
-    invitation_code: invitationCode,
-    invitation_limit: 10,
-    employees: [],
-  };
-}
-
-async function createCompaniesWithEmployeeData(client) {
-  const name = faker.company.name();
-  const splitName = name.split(/[\s\W]+/);
-  const email = `${splitName[0].toLowerCase()}@gmail.com`;
-  const username = `${splitName[0].toLowerCase()}`;
-  const phone_number = faker.helpers.fromRegExp(/0[38]{1}1[0-9]{9}/);
-  const address = faker.location.streetAddress({ useFullAddress: true });
-  const salt = await bcrypt.genSalt(10);
-  const hashedPassword = await bcrypt.hash("12345678", salt);
-
-  const database = client.db(dbName);
-  const collection = database.collection("users");
-
+  let username, email;
   let isUnique = false;
-  let employee;
 
   while (!isUnique) {
-    const totalEmployees = await collection.countDocuments({
-      role: "employee",
-      company: "",
+    const name = faker.company.name();
+    const splitName = name.split(/[\s\W]+/);
+    email = `${splitName[0].toLowerCase()}@gmail.com`;
+    username = `${splitName[0].toLowerCase()}`;
+    const phone_number = faker.helpers.fromRegExp(/0[38]{1}1[0-9]{9}/);
+    const address = faker.location.streetAddress({ useFullAddress: true });
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash("12345678", salt);
+    const invitationCode = await generateInvitationCode(usersCollection);
+
+    const existingUser = await usersCollection.findOne({
+      $or: [{ username: username }, { email: email }],
     });
 
-    const randomIndex = Math.floor(Math.random() * totalEmployees);
-
-    employee = await collection
-      .aggregate([
-        { $match: { role: "employee", company: "" } },
-        { $skip: randomIndex },
-        { $limit: 1 },
-      ])
-      .next();
-
-    if (employee && !usedEmployees.includes(employee.username)) {
+    if (!existingUser) {
       isUnique = true;
+
+      const newCompany = {
+        _id: new ObjectId(),
+        username: username,
+        email: email,
+        name: name,
+        password: hashedPassword,
+        role: "company",
+        phone_number: phone_number,
+        address: address,
+        profile_picture: "/uploads/default.jpg",
+        balance: 0,
+        plan_type: "free",
+        invitation_code: invitationCode,
+        invitation_limit: 10,
+        employees: [],
+      };
+
+      await usersCollection.insertOne(newCompany);
+
+      return username;
     }
   }
-  const invitationCode = await generateInvitationCode(collection);
+}
 
-  const companyData = {
-    _id: new ObjectId(),
-    username: username,
-    email: email,
-    name: name,
-    password: hashedPassword,
-    role: "company",
-    phone_number: phone_number,
-    address: address,
-    profile_picture: "/uploads/default.jpg",
-    balance: 0,
-    plan_type: "free",
-    invitation_code: invitationCode,
-    invitation_limit: 9,
-    employees: [employee.username],
-  };
+async function createCompaniesWithEmployeeData(numEmployees) {
+  let username, email;
+  let isUnique = false;
 
-  await collection.insertOne(companyData);
-  await collection.updateOne(
-    { username: employee.username },
-    { $set: { company: username } }
-  );
+  while (!isUnique) {
+    const name = faker.company.name();
+    const splitName = name.split(/[\s\W]+/);
+    email = `${splitName[0].toLowerCase()}@gmail.com`;
+    username = `${splitName[0].toLowerCase()}`;
+    const phone_number = faker.helpers.fromRegExp(/0[38]{1}1[0-9]{9}/);
+    const address = faker.location.streetAddress({ useFullAddress: true });
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash("12345678", salt);
+    const invitationCode = await generateInvitationCode(usersCollection);
 
-  usedEmployees.push(employee.username);
-  return companyData;
+    const existingUser = await usersCollection.findOne({
+      $or: [{ username: username }, { email: email }],
+    });
+
+    if (!existingUser) {
+      isUnique = true;
+
+      let employees = [];
+      for (let i = 0; i < numEmployees; i++) {
+        employees.push(await createEmployeeData(username));
+      }
+
+      const companyData = {
+        _id: new ObjectId(),
+        username: username,
+        email: email,
+        name: name,
+        password: hashedPassword,
+        role: "company",
+        phone_number: phone_number,
+        address: address,
+        profile_picture: "/uploads/default.jpg",
+        balance: 0,
+        plan_type: "free",
+        invitation_code: invitationCode,
+        invitation_limit: 10,
+        employees: employees,
+      };
+
+      await usersCollection.insertOne(companyData);
+      // const employees = await usersCollection
+      //   .aggregate([
+      //     { $match: { role: "employee", company: "" } },
+      //     { $sample: { size: numEmployees } },
+      //   ])
+      //   .toArray();
+
+      // const employeeUsernames = employees.map((employee) => employee.username);
+
+      // await usersCollection.updateMany(
+      //   { username: { $in: employeeUsernames } },
+      //   { $set: { company: username } }
+      // );
+
+      // await usersCollection.updateOne(
+      //   { username: username },
+      //   { $set: { employees: employeeUsernames } }
+      // );
+
+      return username;
+    }
+  }
 }
 
 async function createTopUp(client) {
@@ -279,14 +318,6 @@ const generateInvitationCode = async (collection) => {
   return invitationCode;
 };
 
-function createEmployeeDatas(n) {
-  const users = [];
-  for (let i = 0; i < n; i++) {
-    users.push(createEmployeeData());
-  }
-  return users;
-}
-
 function createAdminDatas(n) {
   const users = [];
   for (let i = 0; i < n; i++) {
@@ -295,18 +326,26 @@ function createAdminDatas(n) {
   return users;
 }
 
-function createCompaniesDatas(n) {
+async function createEmployeeDatas(n, company = "") {
   const users = [];
   for (let i = 0; i < n; i++) {
-    users.push(createCompaniesData());
+    users.push(await createEmployeeData(company));
   }
   return users;
 }
 
-function createCompaniesWithEmployeeDatas(n, client) {
+async function createCompaniesDatas(n) {
   const users = [];
   for (let i = 0; i < n; i++) {
-    users.push(createCompaniesWithEmployeeData(client));
+    users.push(await createCompaniesData());
+  }
+  return users;
+}
+
+async function createCompaniesWithEmployeeDatas(n, numEmployees) {
+  const users = [];
+  for (let i = 0; i < n; i++) {
+    users.push(await createCompaniesWithEmployeeData(numEmployees));
   }
   return users;
 }
@@ -319,12 +358,7 @@ function createTopUpDatas(n, client) {
   return topups;
 }
 
-async function createSchedulesForCompany(
-  client,
-  username,
-  start_date,
-  end_date
-) {
+async function createSchedulesForCompany(username, start_date, end_date) {
   await client.connect();
   const database = client.db(dbName);
   const collection = database.collection("schedules");
@@ -456,12 +490,7 @@ async function createSchedulesForCompany(
   }
 }
 
-async function deleteSchedulesForCompany(
-  client,
-  username,
-  start_date,
-  end_date
-) {
+async function deleteSchedulesForCompany(username, start_date, end_date) {
   await client.connect();
   const database = client.db(dbName);
   const collection = database.collection("schedules");
@@ -511,10 +540,7 @@ async function deleteSchedulesForCompany(
   }
 }
 
-async function createAndDeleteSchedulesForCompanies(
-  client,
-  companyEmpPromises
-) {
+async function createAndDeleteSchedulesForCompanies(companyEmpPromises) {
   const companyEmps = await Promise.all(companyEmpPromises);
 
   for (const companyPromise of companyEmps) {
@@ -522,7 +548,7 @@ async function createAndDeleteSchedulesForCompanies(
 
     const currentYear = new Date().getFullYear();
     const firstDayThisYear = new Date(currentYear, 0, 1); // 1 Januari thn ini
-    const lastDayThisYear = new Date(currentYear, 11, 31); // 31 Januari thn ini
+    const lastDayThisYear = new Date(currentYear, 11, 31); // 31 Desember thn ini
 
     const startDate = getRandomDate(firstDayThisYear, lastDayThisYear);
     const endDate = getRandomDate(startDate, lastDayThisYear);
@@ -530,21 +556,15 @@ async function createAndDeleteSchedulesForCompanies(
     const start_date = formatDate(startDate);
     const end_date = formatDate(endDate);
 
-    const createSchedules = await createSchedulesForCompany(
-      client,
-      company.username,
-      start_date,
-      end_date
-    );
+    await createSchedulesForCompany(company, start_date, end_date);
 
     const deleteStartDate = getRandomDate(startDate, endDate);
     const deleteEndDate = getRandomDate(deleteStartDate, endDate);
     const delete_start_date = formatDate(deleteStartDate);
     const delete_end_date = formatDate(deleteEndDate);
 
-    const deleteSchedules = await deleteSchedulesForCompany(
-      client,
-      company.username,
+    await deleteSchedulesForCompany(
+      company,
       delete_start_date,
       delete_end_date
     );
@@ -574,26 +594,22 @@ const main = async () => {
     const database = client.db(dbName);
     await database.dropDatabase();
 
-    const adminPromises = createAdminDatas(2);
+    const adminPromises = createAdminDatas(1);
     const admins = await Promise.all(adminPromises);
     await database.collection("users").insertMany(admins);
 
-    const employeePromises = createEmployeeDatas(10);
-    const employees = await Promise.all(employeePromises);
-    await database.collection("users").insertMany(employees);
+    await createEmployeeDatas(5); // 5 employee baru tanpa masuk company
 
-    const companyPromises = createCompaniesDatas(4);
-    const companies = await Promise.all(companyPromises);
-    await database.collection("users").insertMany(companies);
+    const listUsernameCompany = await createCompaniesDatas(4); // 4 company baru tanpa employee
 
-    const companyEmpPromises = createCompaniesWithEmployeeDatas(4, client);
-    await Promise.all(companyEmpPromises);
+    const listUsernameCompanyWithEmployee =
+      await createCompaniesWithEmployeeDatas(2, 5); //2 company baru dengan 5 employees baru
 
     const topUpPromises = createTopUpDatas(6, client);
     await Promise.all(topUpPromises);
 
-    await createAndDeleteSchedulesForCompanies(client, companyPromises);
-    await createAndDeleteSchedulesForCompanies(client, companyEmpPromises);
+    await createAndDeleteSchedulesForCompanies(listUsernameCompany);
+    await createAndDeleteSchedulesForCompanies(listUsernameCompanyWithEmployee);
 
     console.log("OK");
   } catch (error) {
