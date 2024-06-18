@@ -347,6 +347,7 @@ const getSchedule = async (req, res) => {
   } finally {
     await client.close();
   }
+
 };
 
 const deleteScheduleSchema = Joi.object({

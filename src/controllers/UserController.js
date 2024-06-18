@@ -280,22 +280,25 @@ const editUserProfilePicture = async (req, res) => {
 
   const upload = uploadPhoto(user.username).single("profile_picture");
 
+  const filePath = "./" + user.profile_picture;
+
+  if (!filePath.includes("default/default")) {
+    fs.unlink(filePath, async (err) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).send({ error: err });
+      }
+    });
+  }
+
   upload(req, res, async function (err) {
+
     if (err) {
       return res.status(400).json({ message: err.message });
     }
 
     try {
-      const filePath = "./" + user.profile_picture;
 
-      if (!filePath.includes("default/default")) {
-        fs.unlink(filePath, async (err) => {
-          if (err) {
-            console.error(err);
-            return res.status(500).send({ error: err });
-          }
-        });
-      }
 
       await client.connect();
       const database = client.db("proyek_ws");
