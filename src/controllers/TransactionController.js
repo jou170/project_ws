@@ -117,10 +117,11 @@ const viewTransactionDetail = async (req, res) => {
     const transaction = await transCollection.findOne({
       transaction_id: parseInt(transaction_id, 10),
     });
-    delete transaction._id;
     if (!transaction) {
       return res.status(404).json({ message: "Transaction not found" });
     }
+    delete transaction._id;
+
     if (user.role === "company" && transaction.username !== user.username) {
       return res
         .status(403)
