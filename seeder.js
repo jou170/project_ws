@@ -1,9 +1,16 @@
 const { faker } = require("@faker-js/faker");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
+require("dotenv").config();
 const { MongoClient, ObjectId } = require("mongodb");
+const axios = require("axios");
+const moment = require("moment");
 
 faker.seed(42);
+
+const url = process.env.MONGODB_URI;
+const client = new MongoClient(url, { family: 4 });
+const dbName = "coba";
 
 let usedEmployees = [];
 let usedCompany = [];
@@ -144,7 +151,7 @@ async function createCompaniesWithEmployeeData(client) {
   await collection.insertOne(companyData);
   await collection.updateOne(
     { username: employee.username },
-    { $set: { company: name } }
+    { $set: { company: username } }
   );
 
   usedEmployees.push(employee.username);
@@ -309,9 +316,209 @@ function createTopUpDatas(n, client) {
   return topups;
 }
 
-const url = "mongodb://localhost:27017";
-const client = new MongoClient(url, { family: 4 });
-const dbName = "coba";
+async function createSchedulesForCompany(
+  client,
+  username,
+  start_date,
+  end_date
+) {
+  try {
+    await client.connect();
+    const database = client.db("proyek_ws");
+    const collection = database.collection("schedules");
+
+    const response = await axios.get("https://dayoffapi.vercel.app/api", {
+      params: { year: moment(start_date).year() },
+    });
+    const holidays = response.data;
+
+    const holidayDates = holidays.map((holiday) => ({
+      date: moment(holiday.tanggal, "YYYY-M-D").format("YYYY-MM-DD"),
+      detail: holiday.keterangan,
+      is_cuti: holiday.is_cuti,
+    }));
+
+    const startDate = moment(start_date);
+    const endDate = moment(end_date);
+    let activeDays = 0;
+    let offDays = [];
+    let existingDays = [];
+
+    const existingSchedules = await collection
+      .find({
+        username,
+        date: { $gte: start_date, $lte: end_date },
+      })
+      .toArray();
+
+    const existingDates = existingSchedules.map((schedule) => schedule.date);
+
+    for (
+      let date = startDate.clone();
+      date.isSameOrBefore(endDate);
+      date.add(1, "days")
+    ) {
+      const day = date.format("dddd");
+      const dateString = date.format("YYYY-MM-DD");
+
+      const isWeekend = day === "Saturday" || day === "Sunday";
+      const holiday = holidayDates.find((h) => h.date === dateString);
+      const isAlreadyScheduled = existingDates.includes(dateString);
+
+      if (!isWeekend && !holiday && !isAlreadyScheduled) {
+        activeDays++;
+      } else {
+        if (isWeekend || holiday) {
+          offDays.push({
+            day,
+            date: dateString,
+            detail: holiday ? holiday.detail : "",
+          });
+        }
+        if (isAlreadyScheduled) {
+          existingDays.push(dateString);
+        }
+      }
+    }
+
+    if (activeDays === 0) {
+      return res.status(400).json({
+        message:
+          "No schedules were created as all dates are either holidays, weekends, or already scheduled",
+      });
+    }
+
+    let charge = activeDays * 0.1;
+
+    const companyCollection = database.collection("users");
+    const company = await companyCollection.findOne({ username });
+
+    if (company.balance < charge) {
+      return res.status(400).json({ message: "Insufficient balance" });
+    }
+
+    let oldBalance = parseFloat(company.balance);
+    let newBalance = oldBalance - charge;
+    newBalance = parseFloat(newBalance.toFixed(2));
+
+    await companyCollection.updateOne(
+      { username },
+      { $set: { balance: newBalance } }
+    );
+
+    let success_date = [];
+
+    for (
+      let date = startDate.clone();
+      date.isSameOrBefore(endDate);
+      date.add(1, "days")
+    ) {
+      const day = date.format("dddd");
+      const dateString = date.format("YYYY-MM-DD");
+
+      const isWeekend = day === "Saturday" || day === "Sunday";
+      const holiday = holidayDates.find((h) => h.date === dateString);
+      const isAlreadyScheduled = existingDates.includes(dateString);
+
+      if (!isWeekend && !holiday && !isAlreadyScheduled) {
+        await collection.insertOne({
+          username,
+          date: dateString,
+          day,
+          attendance: [],
+        });
+
+        success_date.push(dateString);
+      }
+    }
+
+    const transCollection = database.collection("transactions");
+    const latestTrans = await transCollection.findOne(
+      {},
+      { sort: { transaction_id: -1 } }
+    );
+    const newTransactionId = latestTrans ? latestTrans.transaction_id + 1 : 1;
+    charge = parseFloat(charge.toFixed(2));
+
+    await transCollection.insertOne({
+      transaction_id: newTransactionId,
+      username: username,
+      type: `Create schedules`,
+      datetime: formateddate(),
+      charge: charge,
+      detail: `Schedules created from ${start_date} to ${end_date} with ${activeDays} active days`,
+      schedule_dates: success_date,
+    });
+  } catch (err) {
+    console.error(err);
+  } finally {
+    await client.close();
+  }
+}
+
+async function deleteSchedulesForCompany(
+  client,
+  username,
+  start_date,
+  end_date
+) {
+  try {
+    await client.connect();
+    const database = client.db("coba");
+    const collection = database.collection("schedules");
+    const companyCollection = database.collection("users");
+
+    const existingSchedules = await collection
+      .find({
+        username,
+        date: { $gte: start_date, $lte: end_date },
+      })
+      .toArray();
+
+    if (existingSchedules.length > 0) {
+      const deletedSchedules = existingSchedules.map(
+        (schedule) => schedule.date
+      );
+      await collection.deleteMany({
+        username,
+        date: { $gte: start_date, $lte: end_date },
+      });
+
+      let charge = deletedSchedules.length * 0.1;
+      charge = parseFloat(charge.toFixed(2));
+
+      let newBalance = parseFloat(company.balance) - charge;
+      newBalance = parseFloat(newBalance.toFixed(2));
+
+      await companyCollection.updateOne(
+        { username },
+        { $set: { balance: newBalance } }
+      );
+
+      const transCollection = database.collection("transactions");
+      const latestTrans = await transCollection.findOne(
+        {},
+        { sort: { transaction_id: -1 } }
+      );
+      const newTransactionId = latestTrans ? latestTrans.transaction_id + 1 : 1;
+
+      await transCollection.insertOne({
+        transaction_id: await newTransactionId,
+        username: username,
+        type: `Delete schedules`,
+        datetime: formateddate(),
+        charge: charge,
+        detail: `Schedules deleted from ${start_date} to ${end_date} with ${deletedSchedules.length} schedules affected`,
+        schedule_dates: deletedSchedules,
+      });
+    }
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Internal Server Error" });
+  } finally {
+    await client.close();
+  }
+}
 
 const main = async () => {
   try {
@@ -319,13 +526,13 @@ const main = async () => {
     const database = client.db(dbName);
     await database.dropDatabase();
 
-    const employeePromises = createEmployeeDatas(10);
-    const employees = await Promise.all(employeePromises);
-    await database.collection("users").insertMany(employees);
-
     const adminPromises = createAdminDatas(2);
     const admins = await Promise.all(adminPromises);
     await database.collection("users").insertMany(admins);
+
+    const employeePromises = createEmployeeDatas(10);
+    const employees = await Promise.all(employeePromises);
+    await database.collection("users").insertMany(employees);
 
     const companyPromises = createCompaniesDatas(4);
     const companies = await Promise.all(companyPromises);

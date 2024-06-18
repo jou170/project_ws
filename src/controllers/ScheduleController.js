@@ -204,7 +204,7 @@ const createSchedule = async (req, res) => {
       schedule_dates: success_date,
     });
 
-    if (insertTrans.modifiedCount === 0) {
+    if (insertTrans.insertedCount === 0) {
       return res.status(500).json({ message: "Failed to save transaction" });
     }
 
@@ -255,8 +255,8 @@ const getScheduleSchema = Joi.object({
 });
 
 const getSchedule = async (req, res) => {
-  const { start_date, end_date, limit, offset } = req.query;
-
+  const { start_date, end_date, offset } = req.query;
+  let limit = req.query.limit;
   const user = req.body.user;
   const username = user.role == "company" ? user.username : user.company;
 
@@ -298,12 +298,12 @@ const getSchedule = async (req, res) => {
       .toArray();
 
     if (limit && offset) {
-      companies = companies.slice(limit * (offset - 1), limit * offset);
+      schedules = schedules.slice(limit * (offset - 1), limit * offset);
     } else if (limit) {
-      companies = companies.slice(0, limit);
+      schedules = schedules.slice(0, limit);
     } else if (!limit) {
       limit = 10;
-      companies = companies.slice(0, limit);
+      schedules = schedules.slice(0, limit);
     }
 
     const company = await userCollection.findOne({ username });
@@ -382,6 +382,10 @@ const deleteSchedule = async (req, res) => {
     const database = client.db("proyek_ws");
     const collection = database.collection("schedules");
     const companyCollection = database.collection("users");
+    const company = await companyCollection.findOne({ username });
+    if (!company) {
+      return res.status(404).json({ message: "Company not found" });
+    }
 
     const existingSchedules = await collection
       .find({
@@ -396,19 +400,18 @@ const deleteSchedule = async (req, res) => {
       });
     }
 
+    let charge = existingSchedules.length * 0.1;
+    charge = parseFloat(charge.toFixed(2));
+
+    if (company.balance < charge) {
+      return res.status(400).json({ message: "Insufficient balance" });
+    }
+
     const deletedSchedules = existingSchedules.map((schedule) => schedule.date);
     await collection.deleteMany({
       username,
       date: { $gte: start_date, $lte: end_date },
     });
-
-    const company = await companyCollection.findOne({ username });
-    if (!company) {
-      return res.status(404).json({ message: "Company not found" });
-    }
-
-    let charge = deletedSchedules.length * 0.1;
-    charge = parseFloat(charge.toFixed(2));
 
     let newBalance = parseFloat(company.balance) - charge;
     newBalance = parseFloat(newBalance.toFixed(2));
@@ -435,7 +438,7 @@ const deleteSchedule = async (req, res) => {
       schedule_dates: deletedSchedules,
     });
 
-    if (trans.modifiedCount === 0) {
+    if (trans.insertedId === 0) {
       return res
         .status(500)
         .json({ message: "Failed to save the transactions" });
