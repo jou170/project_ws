@@ -15,6 +15,7 @@ const dbName = "coba";
 let usedEmployees = [];
 let usedCompany = [];
 let topup_id = 0;
+let transaction_id = 0;
 
 async function createEmployeeData() {
   const sex = faker.person.sexType();
@@ -197,7 +198,7 @@ async function createTopUp(client) {
       username: company.username,
       amount: randomAmount.toString(),
       status: "pending",
-      created: datetime,
+      datetime: datetime,
     };
     await database.collection("topups").insertOne(topup);
   } else if (random === 2 || random == 3) {
@@ -207,7 +208,7 @@ async function createTopUp(client) {
       username: company.username,
       amount: randomAmount.toString(),
       status: "approved",
-      created: datetime,
+      datetime: datetime,
     };
     await database.collection("topups").insertOne(topup);
     let oldBalance = parseFloat(company.balance);
@@ -230,7 +231,9 @@ async function createTopUp(client) {
           { username: company.username },
           { $set: { balance: newBalance, plan_type: "standard" } }
         );
+      transaction_id++;
       await database.collection("transactions").insertOne({
+        transaction_id: transaction_id,
         username: company.username,
         type: `Upgrade plan type from free to standard`,
         date: datetime,
@@ -244,7 +247,7 @@ async function createTopUp(client) {
       username: company.username,
       amount: randomAmount.toString(),
       status: "rejected",
-      created: datetime,
+      datetime: datetime,
     };
     await database.collection("topups").insertOne(topup);
   }
@@ -398,6 +401,8 @@ async function createSchedulesForCompany(
 
       let success_date = [];
 
+      const today = new Date();
+      console.log(company.employees);
       for (
         let date = startDate.clone();
         date.isSameOrBefore(endDate);
@@ -406,16 +411,29 @@ async function createSchedulesForCompany(
         const day = date.format("dddd");
         const dateString = date.format("YYYY-MM-DD");
 
+        const isFuture = date.isAfter(today, "day");
         const isWeekend = day === "Saturday" || day === "Sunday";
         const holiday = holidayDates.find((h) => h.date === dateString);
         const isAlreadyScheduled = existingDates.includes(dateString);
 
         if (!isWeekend && !holiday && !isAlreadyScheduled) {
+          const attendance = [];
+
+          if (!isFuture) {
+            const numEmployees = Math.floor(
+              Math.random() * (company.employees.length + 1)
+            );
+            const shuffledEmployees = company.employees.sort(
+              () => 0.5 - Math.random()
+            );
+            attendance.push(...shuffledEmployees.slice(0, numEmployees));
+          }
+
           await collection.insertOne({
             username,
             date: dateString,
             day,
-            attendance: [],
+            attendance,
           });
 
           success_date.push(dateString);
@@ -423,15 +441,10 @@ async function createSchedulesForCompany(
       }
 
       const transCollection = database.collection("transactions");
-      const latestTrans = await transCollection.findOne(
-        {},
-        { sort: { transaction_id: -1 } }
-      );
-      const newTransactionId = latestTrans ? latestTrans.transaction_id + 1 : 1;
       charge = parseFloat(charge.toFixed(2));
-
+      transaction_id++;
       await transCollection.insertOne({
-        transaction_id: newTransactionId,
+        transaction_id: transaction_id,
         username: username,
         type: `Create schedules`,
         datetime: kurangiSatuHari(startDate),
@@ -484,22 +497,57 @@ async function deleteSchedulesForCompany(
       );
 
       const transCollection = database.collection("transactions");
-      const latestTrans = await transCollection.findOne(
-        {},
-        { sort: { transaction_id: -1 } }
-      );
-      const newTransactionId = latestTrans ? latestTrans.transaction_id + 1 : 1;
-
+      transaction_id++;
       await transCollection.insertOne({
-        transaction_id: await newTransactionId,
+        transaction_id: transaction_id,
         username: username,
         type: `Delete schedules`,
-        datetime: start_date,
+        datetime: kurangiSatuHari(start_date),
         charge: charge,
         detail: `Schedules deleted from ${start_date} to ${end_date} with ${deletedSchedules.length} schedules affected`,
         schedule_dates: deletedSchedules,
       });
     }
+  }
+}
+
+async function createAndDeleteSchedulesForCompanies(
+  client,
+  companyEmpPromises
+) {
+  const companyEmps = await Promise.all(companyEmpPromises);
+
+  for (const companyPromise of companyEmps) {
+    const company = await companyPromise;
+
+    const currentYear = new Date().getFullYear();
+    const firstDayThisYear = new Date(currentYear, 0, 1); // 1 Januari thn ini
+    const lastDayThisYear = new Date(currentYear, 11, 31); // 31 Januari thn ini
+
+    const startDate = getRandomDate(firstDayThisYear, lastDayThisYear);
+    const endDate = getRandomDate(startDate, lastDayThisYear);
+
+    const start_date = formatDate(startDate);
+    const end_date = formatDate(endDate);
+
+    const createSchedules = await createSchedulesForCompany(
+      client,
+      company.username,
+      start_date,
+      end_date
+    );
+
+    const deleteStartDate = getRandomDate(startDate, endDate);
+    const deleteEndDate = getRandomDate(deleteStartDate, endDate);
+    const delete_start_date = formatDate(deleteStartDate);
+    const delete_end_date = formatDate(deleteEndDate);
+
+    const deleteSchedules = await deleteSchedulesForCompany(
+      client,
+      company.username,
+      delete_start_date,
+      delete_end_date
+    );
   }
 }
 
@@ -544,35 +592,8 @@ const main = async () => {
     const topUpPromises = createTopUpDatas(6, client);
     await Promise.all(topUpPromises);
 
-    const companyEmps = await Promise.all(companyEmpPromises);
-    for (const company of companyEmps) {
-      const startDate = getRandomDate(
-        new Date(2023, 0, 1),
-        new Date(2023, 11, 31)
-      );
-      const endDate = getRandomDate(startDate, new Date(2023, 11, 31));
-      const start_date = formatDate(startDate);
-      const end_date = formatDate(endDate);
-
-      await createSchedulesForCompany(
-        client,
-        company.username,
-        start_date,
-        end_date
-      );
-
-      const deleteStartDate = getRandomDate(startDate, endDate);
-      const deleteEndDate = getRandomDate(deleteStartDate, endDate);
-      const delete_start_date = formatDate(deleteStartDate);
-      const delete_end_date = formatDate(deleteEndDate);
-
-      await deleteSchedulesForCompany(
-        client,
-        company.username,
-        delete_start_date,
-        delete_end_date
-      );
-    }
+    await createAndDeleteSchedulesForCompanies(client, companyPromises);
+    await createAndDeleteSchedulesForCompanies(client, companyEmpPromises);
 
     console.log("OK");
   } catch (error) {
