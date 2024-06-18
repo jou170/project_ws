@@ -279,8 +279,7 @@ const getSchedule = async (req, res) => {
     const scheduleCollection = database.collection("schedules");
     const userCollection = database.collection("users");
 
-    const employee = await userCollection.findOne({ username });
-    if (user.role == "employee" && employee.company == "") {
+    if (username == "") {
       return res
         .status(400)
         .json({ message: "You are not associated with any company" });
@@ -348,6 +347,7 @@ const getSchedule = async (req, res) => {
   } finally {
     await client.close();
   }
+
 };
 
 const deleteScheduleSchema = Joi.object({
