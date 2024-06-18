@@ -8,8 +8,8 @@ const moment = require("moment");
 
 faker.seed(42);
 
-const url = process.env.MONGODB_URI;
-const client = new MongoClient(url, { family: 4 });
+const uri = process.env.MONGODB_URI;
+const client = new MongoClient(uri, { family: 4 });
 const dbName = "coba";
 
 let usedEmployees = [];
@@ -71,7 +71,7 @@ async function createCompaniesData() {
   const address = faker.location.streetAddress({ useFullAddress: true });
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash("12345678", salt);
-  const database = client.db("coba");
+  const database = client.db(dbName);
   const collection = database.collection("users");
   const invitationCode = await generateInvitationCode(collection);
 
@@ -103,7 +103,7 @@ async function createCompaniesWithEmployeeData(client) {
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash("12345678", salt);
 
-  const database = client.db("coba");
+  const database = client.db(dbName);
   const collection = database.collection("users");
 
   let isUnique = false;
@@ -159,7 +159,7 @@ async function createCompaniesWithEmployeeData(client) {
 }
 
 async function createTopUp(client) {
-  const database = client.db("coba");
+  const database = client.db(dbName);
   const collection = database.collection("users");
 
   const companies = await collection.find({ role: "company" }).toArray();
@@ -322,137 +322,124 @@ async function createSchedulesForCompany(
   start_date,
   end_date
 ) {
-  try {
-    await client.connect();
-    const database = client.db("proyek_ws");
-    const collection = database.collection("schedules");
+  await client.connect();
+  const database = client.db(dbName);
+  const collection = database.collection("schedules");
 
-    const response = await axios.get("https://dayoffapi.vercel.app/api", {
-      params: { year: moment(start_date).year() },
-    });
-    const holidays = response.data;
+  const response = await axios.get("https://dayoffapi.vercel.app/api", {
+    params: { year: moment(start_date).year() },
+  });
+  const holidays = response.data;
 
-    const holidayDates = holidays.map((holiday) => ({
-      date: moment(holiday.tanggal, "YYYY-M-D").format("YYYY-MM-DD"),
-      detail: holiday.keterangan,
-      is_cuti: holiday.is_cuti,
-    }));
+  const holidayDates = holidays.map((holiday) => ({
+    date: moment(holiday.tanggal, "YYYY-M-D").format("YYYY-MM-DD"),
+    detail: holiday.keterangan,
+    is_cuti: holiday.is_cuti,
+  }));
 
-    const startDate = moment(start_date);
-    const endDate = moment(end_date);
-    let activeDays = 0;
-    let offDays = [];
-    let existingDays = [];
+  const startDate = moment(start_date);
+  const endDate = moment(end_date);
+  let activeDays = 0;
+  let offDays = [];
+  let existingDays = [];
 
-    const existingSchedules = await collection
-      .find({
-        username,
-        date: { $gte: start_date, $lte: end_date },
-      })
-      .toArray();
+  const existingSchedules = await collection
+    .find({
+      username,
+      date: { $gte: start_date, $lte: end_date },
+    })
+    .toArray();
 
-    const existingDates = existingSchedules.map((schedule) => schedule.date);
+  const existingDates = existingSchedules.map((schedule) => schedule.date);
 
-    for (
-      let date = startDate.clone();
-      date.isSameOrBefore(endDate);
-      date.add(1, "days")
-    ) {
-      const day = date.format("dddd");
-      const dateString = date.format("YYYY-MM-DD");
+  for (
+    let date = startDate.clone();
+    date.isSameOrBefore(endDate);
+    date.add(1, "days")
+  ) {
+    const day = date.format("dddd");
+    const dateString = date.format("YYYY-MM-DD");
 
-      const isWeekend = day === "Saturday" || day === "Sunday";
-      const holiday = holidayDates.find((h) => h.date === dateString);
-      const isAlreadyScheduled = existingDates.includes(dateString);
+    const isWeekend = day === "Saturday" || day === "Sunday";
+    const holiday = holidayDates.find((h) => h.date === dateString);
+    const isAlreadyScheduled = existingDates.includes(dateString);
 
-      if (!isWeekend && !holiday && !isAlreadyScheduled) {
-        activeDays++;
-      } else {
-        if (isWeekend || holiday) {
-          offDays.push({
-            day,
-            date: dateString,
-            detail: holiday ? holiday.detail : "",
-          });
-        }
-        if (isAlreadyScheduled) {
-          existingDays.push(dateString);
-        }
+    if (!isWeekend && !holiday && !isAlreadyScheduled) {
+      activeDays++;
+    } else {
+      if (isWeekend || holiday) {
+        offDays.push({
+          day,
+          date: dateString,
+          detail: holiday ? holiday.detail : "",
+        });
+      }
+      if (isAlreadyScheduled) {
+        existingDays.push(dateString);
       }
     }
+  }
 
-    if (activeDays === 0) {
-      return res.status(400).json({
-        message:
-          "No schedules were created as all dates are either holidays, weekends, or already scheduled",
-      });
-    }
-
+  if (activeDays > 0) {
     let charge = activeDays * 0.1;
 
     const companyCollection = database.collection("users");
     const company = await companyCollection.findOne({ username });
 
-    if (company.balance < charge) {
-      return res.status(400).json({ message: "Insufficient balance" });
-    }
+    if (company.balance >= charge) {
+      let oldBalance = parseFloat(company.balance);
+      let newBalance = oldBalance - charge;
+      newBalance = parseFloat(newBalance.toFixed(2));
 
-    let oldBalance = parseFloat(company.balance);
-    let newBalance = oldBalance - charge;
-    newBalance = parseFloat(newBalance.toFixed(2));
+      await companyCollection.updateOne(
+        { username },
+        { $set: { balance: newBalance } }
+      );
 
-    await companyCollection.updateOne(
-      { username },
-      { $set: { balance: newBalance } }
-    );
+      let success_date = [];
 
-    let success_date = [];
+      for (
+        let date = startDate.clone();
+        date.isSameOrBefore(endDate);
+        date.add(1, "days")
+      ) {
+        const day = date.format("dddd");
+        const dateString = date.format("YYYY-MM-DD");
 
-    for (
-      let date = startDate.clone();
-      date.isSameOrBefore(endDate);
-      date.add(1, "days")
-    ) {
-      const day = date.format("dddd");
-      const dateString = date.format("YYYY-MM-DD");
+        const isWeekend = day === "Saturday" || day === "Sunday";
+        const holiday = holidayDates.find((h) => h.date === dateString);
+        const isAlreadyScheduled = existingDates.includes(dateString);
 
-      const isWeekend = day === "Saturday" || day === "Sunday";
-      const holiday = holidayDates.find((h) => h.date === dateString);
-      const isAlreadyScheduled = existingDates.includes(dateString);
+        if (!isWeekend && !holiday && !isAlreadyScheduled) {
+          await collection.insertOne({
+            username,
+            date: dateString,
+            day,
+            attendance: [],
+          });
 
-      if (!isWeekend && !holiday && !isAlreadyScheduled) {
-        await collection.insertOne({
-          username,
-          date: dateString,
-          day,
-          attendance: [],
-        });
-
-        success_date.push(dateString);
+          success_date.push(dateString);
+        }
       }
+
+      const transCollection = database.collection("transactions");
+      const latestTrans = await transCollection.findOne(
+        {},
+        { sort: { transaction_id: -1 } }
+      );
+      const newTransactionId = latestTrans ? latestTrans.transaction_id + 1 : 1;
+      charge = parseFloat(charge.toFixed(2));
+
+      await transCollection.insertOne({
+        transaction_id: newTransactionId,
+        username: username,
+        type: `Create schedules`,
+        datetime: kurangiSatuHari(startDate),
+        charge: charge,
+        detail: `Schedules created from ${start_date} to ${end_date} with ${activeDays} active days`,
+        schedule_dates: success_date,
+      });
     }
-
-    const transCollection = database.collection("transactions");
-    const latestTrans = await transCollection.findOne(
-      {},
-      { sort: { transaction_id: -1 } }
-    );
-    const newTransactionId = latestTrans ? latestTrans.transaction_id + 1 : 1;
-    charge = parseFloat(charge.toFixed(2));
-
-    await transCollection.insertOne({
-      transaction_id: newTransactionId,
-      username: username,
-      type: `Create schedules`,
-      datetime: formateddate(),
-      charge: charge,
-      detail: `Schedules created from ${start_date} to ${end_date} with ${activeDays} active days`,
-      schedule_dates: success_date,
-    });
-  } catch (err) {
-    console.error(err);
-  } finally {
-    await client.close();
   }
 }
 
@@ -462,20 +449,24 @@ async function deleteSchedulesForCompany(
   start_date,
   end_date
 ) {
-  try {
-    await client.connect();
-    const database = client.db("coba");
-    const collection = database.collection("schedules");
-    const companyCollection = database.collection("users");
+  await client.connect();
+  const database = client.db(dbName);
+  const collection = database.collection("schedules");
+  const companyCollection = database.collection("users");
+  const company = await companyCollection.findOne({ username });
 
-    const existingSchedules = await collection
-      .find({
-        username,
-        date: { $gte: start_date, $lte: end_date },
-      })
-      .toArray();
+  const existingSchedules = await collection
+    .find({
+      username,
+      date: { $gte: start_date, $lte: end_date },
+    })
+    .toArray();
 
-    if (existingSchedules.length > 0) {
+  if (existingSchedules.length > 0) {
+    let charge = existingSchedules.length * 0.1;
+    charge = parseFloat(charge.toFixed(2));
+
+    if (company.balance >= charge) {
       const deletedSchedules = existingSchedules.map(
         (schedule) => schedule.date
       );
@@ -483,9 +474,6 @@ async function deleteSchedulesForCompany(
         username,
         date: { $gte: start_date, $lte: end_date },
       });
-
-      let charge = deletedSchedules.length * 0.1;
-      charge = parseFloat(charge.toFixed(2));
 
       let newBalance = parseFloat(company.balance) - charge;
       newBalance = parseFloat(newBalance.toFixed(2));
@@ -506,18 +494,30 @@ async function deleteSchedulesForCompany(
         transaction_id: await newTransactionId,
         username: username,
         type: `Delete schedules`,
-        datetime: formateddate(),
+        datetime: start_date,
         charge: charge,
         detail: `Schedules deleted from ${start_date} to ${end_date} with ${deletedSchedules.length} schedules affected`,
         schedule_dates: deletedSchedules,
       });
     }
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: "Internal Server Error" });
-  } finally {
-    await client.close();
   }
+}
+
+function getRandomDate(start, end) {
+  return new Date(
+    start.getTime() + Math.random() * (end.getTime() - start.getTime())
+  );
+}
+
+function formatDate(date) {
+  return moment(date).format("YYYY-MM-DD");
+}
+
+function kurangiSatuHari(startDateStr) {
+  let startDate = new Date(startDateStr);
+  startDate.setDate(startDate.getDate() - 1);
+  let newDateStr = startDate.toISOString().slice(0, 10);
+  return newDateStr;
 }
 
 const main = async () => {
@@ -543,6 +543,36 @@ const main = async () => {
 
     const topUpPromises = createTopUpDatas(6, client);
     await Promise.all(topUpPromises);
+
+    const companyEmps = await Promise.all(companyEmpPromises);
+    for (const company of companyEmps) {
+      const startDate = getRandomDate(
+        new Date(2023, 0, 1),
+        new Date(2023, 11, 31)
+      );
+      const endDate = getRandomDate(startDate, new Date(2023, 11, 31));
+      const start_date = formatDate(startDate);
+      const end_date = formatDate(endDate);
+
+      await createSchedulesForCompany(
+        client,
+        company.username,
+        start_date,
+        end_date
+      );
+
+      const deleteStartDate = getRandomDate(startDate, endDate);
+      const deleteEndDate = getRandomDate(deleteStartDate, endDate);
+      const delete_start_date = formatDate(deleteStartDate);
+      const delete_end_date = formatDate(deleteEndDate);
+
+      await deleteSchedulesForCompany(
+        client,
+        company.username,
+        delete_start_date,
+        delete_end_date
+      );
+    }
 
     console.log("OK");
   } catch (error) {

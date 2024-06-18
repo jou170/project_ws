@@ -215,7 +215,7 @@ const getTopUpRequest = async (req, res) => {
           },
           {
             $addFields: {
-              dateSubstring: { $substr: ["$created", 0, 10] },
+              dateSubstring: { $substr: ["$datetime", 0, 10] },
             },
           },
           {
@@ -227,7 +227,7 @@ const getTopUpRequest = async (req, res) => {
             $project: {
               _id: 0,
               topup_id: 1,
-              created: 1,
+              datetime: 1,
               company_name: "$companyInfo.name",
               company_username: "$companyInfo.username",
               amount: 1,
