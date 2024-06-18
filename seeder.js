@@ -13,7 +13,6 @@ const uri = "mongodb://localhost:27017/";
 const client = new MongoClient(uri, { family: 4 });
 const dbName = "coba";
 
-let usedEmployees = [];
 let usedCompany = [];
 let topup_id = 0;
 let transaction_id = 0;
@@ -64,23 +63,37 @@ async function createEmployeeData(company = "") {
 }
 
 async function createAdminData() {
-  const sex = faker.person.sexType();
-  const firstName = faker.person.firstName(sex);
-  const lastName = faker.person.lastName(sex);
-  const name = `${firstName} ${lastName}`;
-  const email = `${firstName.toLowerCase()}@gmail.com`;
-  const username = `${firstName.toLowerCase()}`;
-  const salt = await bcrypt.genSalt(10);
-  const hashedPassword = await bcrypt.hash("12345678", salt);
+  let username, email;
+  let isUnique = false;
 
-  return {
-    _id: new ObjectId(),
-    username: username,
-    email: email,
-    name: name,
-    password: hashedPassword,
-    role: "admin",
-  };
+  while (!isUnique) {
+    const sex = faker.person.sexType();
+    const firstName = faker.person.firstName(sex);
+    const lastName = faker.person.lastName(sex);
+    const name = `${firstName} ${lastName}`;
+    email = `${firstName.toLowerCase()}@gmail.com`;
+    username = `${firstName.toLowerCase()}`;
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash("12345678", salt);
+
+    const existingUser = await usersCollection.findOne({
+      $or: [{ username: username }, { email: email }],
+    });
+
+    if (!existingUser) {
+      isUnique = true;
+
+      const newEmployee = {
+        _id: new ObjectId(),
+        username: username,
+        email: email,
+        name: name,
+        password: hashedPassword,
+        role: "admin",
+      };
+      await usersCollection.insertOne(newEmployee);
+    }
+  }
 }
 
 async function createCompaniesData() {
@@ -174,32 +187,12 @@ async function createCompaniesWithEmployeeData(numEmployees) {
       };
 
       await usersCollection.insertOne(companyData);
-      // const employees = await usersCollection
-      //   .aggregate([
-      //     { $match: { role: "employee", company: "" } },
-      //     { $sample: { size: numEmployees } },
-      //   ])
-      //   .toArray();
-
-      // const employeeUsernames = employees.map((employee) => employee.username);
-
-      // await usersCollection.updateMany(
-      //   { username: { $in: employeeUsernames } },
-      //   { $set: { company: username } }
-      // );
-
-      // await usersCollection.updateOne(
-      //   { username: username },
-      //   { $set: { employees: employeeUsernames } }
-      // );
-
       return username;
     }
   }
 }
 
-async function createTopUp(client) {
-  const database = client.db(dbName);
+async function createTopUp() {
   const collection = database.collection("users");
 
   const companies = await collection.find({ role: "company" }).toArray();
@@ -261,24 +254,24 @@ async function createTopUp(client) {
         { $set: { balance: newBalance } }
       );
 
-    let randomNum = Math.floor(Math.random() * 3) + 1;
-    if (randomNum == 1 || randomNum == 3) {
-      newBalance = newBalance - 30;
-      await database
-        .collection("users")
-        .updateOne(
-          { username: company.username },
-          { $set: { balance: newBalance, plan_type: "standard" } }
-        );
-      transaction_id++;
-      await database.collection("transactions").insertOne({
-        transaction_id: transaction_id,
-        username: company.username,
-        type: `Upgrade plan type from free to standard`,
-        date: datetime,
-        charge: 30,
-      });
-    }
+    // let randomNum = Math.floor(Math.random() * 3) + 1;
+    // if (randomNum == 1 || randomNum == 3) {
+    //   newBalance = newBalance - 30;
+    //   await database
+    //     .collection("users")
+    //     .updateOne(
+    //       { username: company.username },
+    //       { $set: { balance: newBalance, plan_type: "standard" } }
+    //     );
+    //   transaction_id++;
+    //   await database.collection("transactions").insertOne({
+    //     transaction_id: transaction_id,
+    //     username: company.username,
+    //     type: `Upgrade plan type from free to standard`,
+    //     date: datetime,
+    //     charge: 30,
+    //   });
+    // }
   } else if (random === 4) {
     topup = {
       _id: new ObjectId(),
@@ -318,12 +311,10 @@ const generateInvitationCode = async (collection) => {
   return invitationCode;
 };
 
-function createAdminDatas(n) {
-  const users = [];
+async function createAdminDatas(n) {
   for (let i = 0; i < n; i++) {
-    users.push(createAdminData());
+    await createAdminData();
   }
-  return users;
 }
 
 async function createEmployeeDatas(n, company = "") {
@@ -356,6 +347,71 @@ function createTopUpDatas(n, client) {
     topups.push(createTopUp(client));
   }
   return topups;
+}
+
+async function getUpgradeCost(currentPlan, newPlan) {
+  const costs = {
+    free: { standard: 30, premium: 50 },
+    standard: { premium: 30 },
+  };
+
+  let cost = costs[currentPlan][newPlan];
+  cost = parseFloat(cost.toFixed(2));
+
+  return cost;
+}
+
+async function upgradePlanType(companyPromises) {
+  const transCollection = database.collection("transactions");
+
+  const companyList = await Promise.all(companyPromises);
+  for (const companyUsername of companyList) {
+    const username = await companyUsername;
+    const company = await usersCollection.findOne({ username });
+
+    const { plan_type, balance } = company;
+    let newPlanType;
+    let cost;
+
+    if (plan_type === "free") {
+      const upgradeOptions = ["standard", "premium"];
+      newPlanType = faker.helpers.arrayElement(upgradeOptions);
+      cost = await getUpgradeCost(plan_type, newPlanType);
+    } else if (plan_type === "standard") {
+      newPlanType = "premium";
+      cost = await getUpgradeCost(plan_type, newPlanType);
+    }
+
+    if (plan_type === "premium") {
+      continue;
+    }
+
+    if (balance >= cost) {
+      let newBalance = parseFloat(balance) - parseFloat(cost);
+      newBalance = parseFloat(newBalance.toFixed(2));
+      await usersCollection.updateOne(
+        { username },
+        { $set: { plan_type: newPlanType, balance: newBalance } }
+      );
+
+      let currentDate = new Date();
+      let datetime = `${currentDate.getFullYear()}-${padNumber(
+        currentDate.getMonth() + 1
+      )}-${padNumber(currentDate.getDate())} ${padNumber(
+        currentDate.getHours()
+      )}:${padNumber(currentDate.getMinutes())}`;
+
+      transaction_id++;
+      await transCollection.insertOne({
+        transaction_id: transaction_id,
+        username: username,
+        type: "Upgrade plan type",
+        datetime: datetime,
+        charge: cost,
+        detail: `Upgrade plan type from ${plan_type} to ${newPlanType}`,
+      });
+    }
+  }
 }
 
 async function createSchedulesForCompany(username, start_date, end_date) {
@@ -436,7 +492,6 @@ async function createSchedulesForCompany(username, start_date, end_date) {
       let success_date = [];
 
       const today = new Date();
-      console.log(company.employees);
       for (
         let date = startDate.clone();
         date.isSameOrBefore(endDate);
@@ -594,9 +649,7 @@ const main = async () => {
     const database = client.db(dbName);
     await database.dropDatabase();
 
-    const adminPromises = createAdminDatas(1);
-    const admins = await Promise.all(adminPromises);
-    await database.collection("users").insertMany(admins);
+    await createAdminDatas(1);
 
     await createEmployeeDatas(5); // 5 employee baru tanpa masuk company
 
@@ -607,6 +660,11 @@ const main = async () => {
 
     const topUpPromises = createTopUpDatas(6, client);
     await Promise.all(topUpPromises);
+
+    await upgradePlanType(listUsernameCompany);
+    await upgradePlanType(listUsernameCompanyWithEmployee);
+    await upgradePlanType(listUsernameCompany);
+    await upgradePlanType(listUsernameCompanyWithEmployee);
 
     await createAndDeleteSchedulesForCompanies(listUsernameCompany);
     await createAndDeleteSchedulesForCompanies(listUsernameCompanyWithEmployee);
