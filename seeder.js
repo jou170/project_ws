@@ -51,7 +51,7 @@ async function createEmployeeData(company = "") {
         role: "employee",
         phone_number: phone_number,
         address: address,
-        profile_picture: "/uploads/default.jpg",
+        profile_picture: "/uploads/default/default.png",
         company: company,
       };
       await usersCollection.insertOne(newEmployee);
@@ -126,7 +126,7 @@ async function createCompaniesData() {
         role: "company",
         phone_number: phone_number,
         address: address,
-        profile_picture: "/uploads/default.jpg",
+        profile_picture: "/uploads/default/default.png",
         balance: 0,
         plan_type: "free",
         invitation_code: invitationCode,
@@ -177,7 +177,7 @@ async function createCompaniesWithEmployeeData(numEmployees) {
         role: "company",
         phone_number: phone_number,
         address: address,
-        profile_picture: "/uploads/default.jpg",
+        profile_picture: "/uploads/default/default.png",
         balance: 0,
         plan_type: "free",
         invitation_code: invitationCode,
